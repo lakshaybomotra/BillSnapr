@@ -121,10 +121,11 @@ export default function CheckoutScreen() {
                             <TouchableOpacity
                                 key={method.id}
                                 onPress={() => cart.setPaymentMethod(method.id as any)}
-                                className={`flex-1 items-center justify-center p-4 rounded-xl border ${cart.paymentMethod === method.id
-                                    ? 'border-primary-500 bg-primary-50 shadow-sm'
-                                    : 'border-gray-200 bg-white'
-                                    }`}
+                                className="flex-1 items-center justify-center p-4 rounded-xl border"
+                                style={{
+                                    borderColor: cart.paymentMethod === method.id ? '#00936E' : '#E2E8F0',
+                                    backgroundColor: cart.paymentMethod === method.id ? '#ECFDF5' : '#FFFFFF',
+                                }}
                             >
                                 <IconSymbol
                                     name={method.icon as any}
