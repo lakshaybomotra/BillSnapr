@@ -27,16 +27,17 @@ export interface Order {
     order_items?: OrderItem[];
 }
 
-// Fetch orders with pagination
 export function useOrders(limit = 50) {
     const tenant = useAuthStore((s) => s.tenant);
 
     return useQuery({
         queryKey: ['orders', tenant?.id, limit],
         queryFn: async () => {
+            if (!tenant) return [];
             const { data, error } = await supabase
                 .from('orders')
                 .select('*, order_items(*)')
+                .eq('tenant_id', tenant.id)
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
@@ -47,7 +48,6 @@ export function useOrders(limit = 50) {
     });
 }
 
-// Fetch single order
 export function useOrder(orderId: string) {
     return useQuery({
         queryKey: ['order', orderId],
@@ -56,7 +56,7 @@ export function useOrder(orderId: string) {
                 .from('orders')
                 .select('*, order_items(*)')
                 .eq('id', orderId)
-                .single();
+                .maybeSingle();
 
             if (error) throw error;
             return data as Order;
@@ -65,7 +65,6 @@ export function useOrder(orderId: string) {
     });
 }
 
-// Create order from cart
 export function useCreateOrder() {
     const queryClient = useQueryClient();
     const tenant = useAuthStore((s) => s.tenant);
@@ -78,33 +77,12 @@ export function useCreateOrder() {
             if (cart.items.length === 0) throw new Error('Cart is empty');
             if (!cart.paymentMethod) throw new Error('Payment method required');
 
-            // Calculate totals
             const subtotal = cart.subtotal();
             const taxTotal = cart.taxTotal();
             const discountAmount = cart.discountAmount();
             const total = cart.total();
 
-            // Create order
-            const { data: order, error: orderError } = await supabase
-                .from('orders')
-                .insert({
-                    tenant_id: tenant.id,
-                    subtotal,
-                    tax_total: taxTotal,
-                    discount_amount: discountAmount,
-                    total,
-                    payment_method: cart.paymentMethod,
-                    status: 'completed',
-                    created_by: user.id,
-                })
-                .select()
-                .single();
-
-            if (orderError) throw orderError;
-
-            // Create order items
-            const orderItems = cart.items.map((item) => ({
-                order_id: order.id,
+            const items = cart.items.map((item) => ({
                 product_id: item.productId,
                 product_name: item.name,
                 price: item.price,
@@ -112,13 +90,20 @@ export function useCreateOrder() {
                 tax_rate: item.taxRate,
             }));
 
-            const { error: itemsError } = await supabase
-                .from('order_items')
-                .insert(orderItems);
+            const { data, error } = await supabase.rpc('create_order', {
+                p_tenant_id: tenant.id,
+                p_subtotal: subtotal,
+                p_tax_total: taxTotal,
+                p_discount_amount: discountAmount,
+                p_total: total,
+                p_payment_method: cart.paymentMethod,
+                p_status: 'completed',
+                p_created_by: user.id,
+                p_items: items,
+            });
 
-            if (itemsError) throw itemsError;
-
-            return order as Order;
+            if (error) throw error;
+            return data as Order;
         },
         onSuccess: () => {
             cart.clearCart();
@@ -128,7 +113,6 @@ export function useCreateOrder() {
     });
 }
 
-// Void order
 export function useVoidOrder() {
     const queryClient = useQueryClient();
 
@@ -148,19 +132,20 @@ export function useVoidOrder() {
     });
 }
 
-// Get daily stats
 export function useDailyStats() {
     const tenant = useAuthStore((s) => s.tenant);
 
     return useQuery({
         queryKey: ['daily-stats', tenant?.id],
         queryFn: async () => {
+            if (!tenant) return { totalSales: 0, orderCount: 0, cashSales: 0, cardSales: 0, otherSales: 0 };
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             const { data, error } = await supabase
                 .from('orders')
                 .select('total, payment_method')
+                .eq('tenant_id', tenant.id)
                 .eq('status', 'completed')
                 .gte('created_at', today.toISOString());
 
@@ -184,6 +169,6 @@ export function useDailyStats() {
             return stats;
         },
         enabled: !!tenant,
-        refetchInterval: 30000, // Refresh every 30s
+        refetchInterval: 30000,
     });
 }

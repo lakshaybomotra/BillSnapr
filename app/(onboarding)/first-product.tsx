@@ -3,6 +3,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/input';
 import { Screen } from '@/components/ui/screen';
 import { useUpdateProfile } from '@/hooks/use-auth';
+import { getCurrencySymbol } from '@/lib/currency';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -43,9 +44,7 @@ export default function FirstProductSetup() {
 
     const isLoading = createProduct.isPending || updateProfile.isPending;
 
-    const currencySymbol = tenant?.currency === 'USD' ? '$' :
-        tenant?.currency === 'EUR' ? '€' :
-            tenant?.currency === 'GBP' ? '£' : '₹';
+    const currencySymbol = getCurrencySymbol(tenant?.currency);
 
     return (
         <Screen className="justify-between">

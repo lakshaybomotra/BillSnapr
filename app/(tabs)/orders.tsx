@@ -1,5 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Order, useOrders } from '@/hooks/use-orders';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore } from '@/store';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
@@ -11,14 +12,7 @@ export default function OrdersScreen() {
     const { data: orders, isLoading, refetch } = useOrders();
     const tenant = useAuthStore((s) => s.tenant);
 
-    const getCurrencySymbol = () => {
-        switch (tenant?.currency) {
-            case 'USD': return '$';
-            case 'EUR': return '€';
-            case 'GBP': return '£';
-            default: return '₹';
-        }
-    };
+    const currency = getCurrencySymbol(tenant?.currency);
 
     const getStatusColor = (status: Order['status']) => {
         switch (status) {
@@ -79,7 +73,7 @@ export default function OrdersScreen() {
                                 </Text>
                             </View>
                             <Text className="text-xl font-bold text-text-primary">
-                                {getCurrencySymbol()}{item.total.toFixed(2)}
+                                {currency}{item.total.toFixed(2)}
                             </Text>
                         </View>
 

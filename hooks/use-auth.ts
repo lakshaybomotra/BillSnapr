@@ -126,9 +126,10 @@ export function useProfile() {
           tenant:tenants(*)
         `)
                 .eq('id', user.id)
-                .single();
+                .maybeSingle();
 
             if (error) throw error;
+            if (!data) return null;
 
             setTenant(data.tenant);
             setOnboarded(data.is_onboarded);

@@ -1,5 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useOrder, useVoidOrder } from '@/hooks/use-orders';
+import { getCurrencySymbol } from '@/lib/currency';
 import { EscPosBuilder } from '@/lib/printer/esc-pos';
 import { useAuthStore } from '@/store';
 import { usePrinterStore } from '@/store/printer';
@@ -18,14 +19,7 @@ export default function OrderDetailsScreen() {
     // Printer Store
     const { connectedDevice, print } = usePrinterStore();
 
-    const getCurrencySymbol = () => {
-        switch (tenant?.currency) {
-            case 'USD': return '$';
-            case 'EUR': return '€';
-            case 'GBP': return '£';
-            default: return '₹';
-        }
-    };
+    const currency = getCurrencySymbol(tenant?.currency);
 
     const handlePrint = async () => {
         if (!connectedDevice) {
@@ -154,7 +148,7 @@ export default function OrderDetailsScreen() {
                                     </Text>
                                 </View>
                                 <Text className="text-text-primary font-medium">
-                                    {getCurrencySymbol()}{(item.price * item.quantity).toFixed(2)}
+                                    {currency}{(item.price * item.quantity).toFixed(2)}
                                 </Text>
                             </View>
                         ))}
@@ -166,20 +160,20 @@ export default function OrderDetailsScreen() {
                     <View className="flex-row justify-between mb-2">
                         <Text className="text-text-secondary">Subtotal</Text>
                         <Text className="text-text-primary font-medium">
-                            {getCurrencySymbol()}{order.subtotal.toFixed(2)}
+                            {currency}{order.subtotal.toFixed(2)}
                         </Text>
                     </View>
                     <View className="flex-row justify-between mb-2">
                         <Text className="text-text-secondary">Tax</Text>
                         <Text className="text-text-primary font-medium">
-                            {getCurrencySymbol()}{order.tax_total.toFixed(2)}
+                            {currency}{order.tax_total.toFixed(2)}
                         </Text>
                     </View>
                     {order.discount_amount > 0 && (
                         <View className="flex-row justify-between mb-2">
                             <Text className="text-green-600">Discount</Text>
                             <Text className="text-green-600 font-medium">
-                                -{getCurrencySymbol()}{order.discount_amount.toFixed(2)}
+                                -{currency}{order.discount_amount.toFixed(2)}
                             </Text>
                         </View>
                     )}
@@ -187,7 +181,7 @@ export default function OrderDetailsScreen() {
                     <View className="flex-row justify-between items-center">
                         <Text className="text-lg font-bold text-text-primary">Total</Text>
                         <Text className="text-2xl font-bold text-primary-600">
-                            {getCurrencySymbol()}{order.total.toFixed(2)}
+                            {currency}{order.total.toFixed(2)}
                         </Text>
                     </View>
                 </View>

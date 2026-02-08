@@ -1,5 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useProducts } from '@/hooks/use-products';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore } from '@/store';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -11,14 +12,7 @@ export default function ProductsScreen() {
     const { data: products, isLoading, refetch } = useProducts();
     const tenant = useAuthStore((s) => s.tenant);
 
-    const getCurrencySymbol = () => {
-        switch (tenant?.currency) {
-            case 'USD': return '$';
-            case 'EUR': return '€';
-            case 'GBP': return '£';
-            default: return '₹';
-        }
-    };
+    const currency = getCurrencySymbol(tenant?.currency);
 
     return (
         <SafeAreaView className="flex-1 bg-surface" edges={['top']}>
@@ -77,7 +71,7 @@ export default function ProductsScreen() {
                         </View>
                         <View className="items-end">
                             <Text className="text-text-primary font-bold text-lg">
-                                {getCurrencySymbol()}{item.price.toFixed(2)}
+                                {currency}{item.price.toFixed(2)}
                             </Text>
                             <View className="flex-row items-center mt-1">
                                 <View className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />

@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Screen } from '@/components/ui/screen';
 import { useCreateOrder } from '@/hooks/use-orders';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore, useCartStore } from '@/store';
 import { router, Stack } from 'expo-router';
 import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -28,14 +29,7 @@ export default function CheckoutScreen() {
         });
     };
 
-    const getCurrencySymbol = () => {
-        switch (tenant?.currency) {
-            case 'USD': return '$';
-            case 'EUR': return '€';
-            case 'GBP': return '£';
-            default: return '₹';
-        }
-    };
+    const currency = getCurrencySymbol(tenant?.currency);
 
     if (cart.items.length === 0) {
         return (
@@ -86,7 +80,7 @@ export default function CheckoutScreen() {
                             <View className="flex-1">
                                 <Text className="text-text-primary font-medium text-base">{item.name}</Text>
                                 <Text className="text-primary-600 font-semibold">
-                                    {getCurrencySymbol()}{item.price.toFixed(2)}
+                                    {currency}{item.price.toFixed(2)}
                                 </Text>
                             </View>
 
@@ -145,20 +139,20 @@ export default function CheckoutScreen() {
                     <View className="flex-row justify-between mb-2">
                         <Text className="text-text-secondary">Subtotal</Text>
                         <Text className="text-text-primary font-medium">
-                            {getCurrencySymbol()}{cart.subtotal().toFixed(2)}
+                            {currency}{cart.subtotal().toFixed(2)}
                         </Text>
                     </View>
                     <View className="flex-row justify-between mb-2">
                         <Text className="text-text-secondary">Tax</Text>
                         <Text className="text-text-primary font-medium">
-                            {getCurrencySymbol()}{cart.taxTotal().toFixed(2)}
+                            {currency}{cart.taxTotal().toFixed(2)}
                         </Text>
                     </View>
                     {cart.discountAmount() > 0 && (
                         <View className="flex-row justify-between mb-2">
                             <Text className="text-green-600">Discount</Text>
                             <Text className="text-green-600 font-medium">
-                                -{getCurrencySymbol()}{cart.discountAmount().toFixed(2)}
+                                -{currency}{cart.discountAmount().toFixed(2)}
                             </Text>
                         </View>
                     )}
@@ -166,7 +160,7 @@ export default function CheckoutScreen() {
                     <View className="flex-row justify-between items-center">
                         <Text className="text-lg font-bold text-text-primary">Total</Text>
                         <Text className="text-2xl font-bold text-primary-600">
-                            {getCurrencySymbol()}{cart.total().toFixed(2)}
+                            {currency}{cart.total().toFixed(2)}
                         </Text>
                     </View>
                 </View>
@@ -186,7 +180,7 @@ export default function CheckoutScreen() {
                         <ActivityIndicator color="white" />
                     ) : (
                         <Text className="text-white font-bold text-lg">
-                            {cart.paymentMethod ? `Pay ${getCurrencySymbol()}${cart.total().toFixed(2)}` : 'Select Payment Method'}
+                            {cart.paymentMethod ? `Pay ${currency}${cart.total().toFixed(2)}` : 'Select Payment Method'}
                         </Text>
                     )}
                 </TouchableOpacity>

@@ -26,7 +26,7 @@ interface CartState {
     addItem: (product: Omit<CartItem, 'quantity'>) => void;
     removeItem: (productId: string) => void;
     updateQuantity: (productId: string, quantity: number) => void;
-    setPaymentMethod: (method: CartItem['quantity'] extends number ? 'cash' | 'card' | 'other' : never) => void;
+    setPaymentMethod: (method: 'cash' | 'card' | 'other') => void;
     applyDiscount: (discount: CartState['discount']) => void;
     clearCart: () => void;
 }

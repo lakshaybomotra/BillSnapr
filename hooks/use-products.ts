@@ -26,16 +26,17 @@ export interface Product {
     category?: Category;
 }
 
-// Fetch all products for tenant
 export function useProducts() {
     const tenant = useAuthStore((s) => s.tenant);
 
     return useQuery({
         queryKey: ['products', tenant?.id],
         queryFn: async () => {
+            if (!tenant) return [];
             const { data, error } = await supabase
                 .from('products')
                 .select('*, category:categories(*)')
+                .eq('tenant_id', tenant.id)
                 .eq('is_active', true)
                 .order('name');
 
@@ -46,16 +47,17 @@ export function useProducts() {
     });
 }
 
-// Fetch all categories
 export function useCategories() {
     const tenant = useAuthStore((s) => s.tenant);
 
     return useQuery({
         queryKey: ['categories', tenant?.id],
         queryFn: async () => {
+            if (!tenant) return [];
             const { data, error } = await supabase
                 .from('categories')
                 .select('*')
+                .eq('tenant_id', tenant.id)
                 .eq('is_active', true)
                 .order('sort_order');
 
@@ -66,7 +68,6 @@ export function useCategories() {
     });
 }
 
-// Create product
 export function useCreateProduct() {
     const queryClient = useQueryClient();
     const tenant = useAuthStore((s) => s.tenant);
@@ -96,7 +97,6 @@ export function useCreateProduct() {
     });
 }
 
-// Update product
 export function useUpdateProduct() {
     const queryClient = useQueryClient();
 
@@ -104,9 +104,6 @@ export function useUpdateProduct() {
         mutationFn: async ({ id, ...updates }: Partial<Product> & { id: string }) => {
             const { data, error } = await supabase
                 .from('products')
-                // Remove undefined values to avoid overwriting with defaults if needed, 
-                // but usually Supabase ignores undefined if not passed in object? 
-                // Actually spread works fine.
                 .update(updates)
                 .eq('id', id)
                 .select()
@@ -121,7 +118,6 @@ export function useUpdateProduct() {
     });
 }
 
-// Delete product (soft delete)
 export function useDeleteProduct() {
     const queryClient = useQueryClient();
 
@@ -140,7 +136,6 @@ export function useDeleteProduct() {
     });
 }
 
-// Create category
 export function useCreateCategory() {
     const queryClient = useQueryClient();
     const tenant = useAuthStore((s) => s.tenant);
@@ -154,7 +149,7 @@ export function useCreateCategory() {
                 .insert({
                     name: category.name,
                     image_url: category.image_url,
-                    tenant_id: tenant.id
+                    tenant_id: tenant.id,
                 })
                 .select()
                 .single();

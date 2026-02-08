@@ -3,6 +3,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/input';
 import { Screen } from '@/components/ui/screen';
 import { Product, useCategories, useProducts } from '@/hooks/use-products';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore, useCartStore } from '@/store';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -45,14 +46,7 @@ export default function POSScreen() {
     });
   };
 
-  const getCurrencySymbol = () => {
-    switch (tenant?.currency) {
-      case 'USD': return '$';
-      case 'EUR': return '€';
-      case 'GBP': return '£';
-      default: return '₹';
-    }
-  };
+  const currency = getCurrencySymbol(tenant?.currency);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -176,7 +170,7 @@ export default function POSScreen() {
                   {item.name}
                 </Text>
                 <Text className="text-primary-700 font-bold text-base">
-                  {getCurrencySymbol()}{item.price.toFixed(2)}
+                  {currency}{item.price.toFixed(2)}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -203,7 +197,7 @@ export default function POSScreen() {
             </View>
             <View className="flex-row items-center bg-white/10 px-3 py-1.5 rounded-lg">
               <Text className="text-white font-bold text-lg mr-1">
-                {getCurrencySymbol()}{cart.total().toFixed(2)}
+                {currency}{cart.total().toFixed(2)}
               </Text>
               <IconSymbol name="chevron.right" size={14} color="white" />
             </View>
