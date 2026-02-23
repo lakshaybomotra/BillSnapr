@@ -1,21 +1,25 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useImageUpload } from '@/hooks/use-image-upload';
-import { useCreateCategory } from '@/hooks/use-products';
+import { useCreateCategory, useDeleteCategory, useUpdateCategory } from '@/hooks/use-products';
+import { hapticLight, hapticMedium } from '@/lib/haptics';
 import { Image } from 'expo-image';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function CategoryModal() {
-    // Currently only supporting Create, as Edit requires more setup
+    const params = useLocalSearchParams<{ id?: string; name?: string; image_url?: string }>();
+    const isEditing = !!params.id;
+
     const createCategory = useCreateCategory();
+    const updateCategory = useUpdateCategory();
+    const deleteCategory = useDeleteCategory();
     const { pickImage, uploadImage, isUploading: isImageUploading } = useImageUpload();
 
-    // Simplistic state for now
-    const [name, setName] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
+    const [name, setName] = useState(params.name || '');
+    const [imageUrl, setImageUrl] = useState(params.image_url || '');
 
-    const isLoading = createCategory.isPending || isImageUploading;
+    const isLoading = createCategory.isPending || updateCategory.isPending || deleteCategory.isPending || isImageUploading;
 
     const handleImagePick = async () => {
         const uri = await pickImage();
@@ -28,18 +32,46 @@ export default function CategoryModal() {
     };
 
     const handleSave = () => {
-        if (!name) return;
+        if (!name.trim()) return;
+        hapticLight();
 
-        createCategory.mutate(
-            { name, image_url: imageUrl || undefined },
-            { onSuccess: () => router.back() }
+        if (isEditing) {
+            updateCategory.mutate(
+                { id: params.id!, name: name.trim(), image_url: imageUrl || null },
+                { onSuccess: () => router.back() }
+            );
+        } else {
+            createCategory.mutate(
+                { name: name.trim(), image_url: imageUrl || undefined },
+                { onSuccess: () => router.back() }
+            );
+        }
+    };
+
+    const handleDelete = () => {
+        if (!params.id) return;
+        hapticMedium();
+
+        Alert.alert(
+            'Delete Category',
+            `Are you sure you want to delete"${name}"? Products in this category will become uncategorized.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete', style: 'destructive',
+                    onPress: () => deleteCategory.mutate(params.id!, {
+                        onSuccess: () => router.back(),
+                        onError: (error) => Alert.alert('Error', error.message),
+                    }),
+                },
+            ]
         );
     };
 
     return (
         <View className="flex-1 bg-surface">
             <Stack.Screen options={{
-                title: 'New Category',
+                title: isEditing ? 'Edit Category' : 'New Category',
                 presentation: 'modal',
             }} />
 
@@ -77,18 +109,30 @@ export default function CategoryModal() {
 
                 <TouchableOpacity
                     onPress={handleSave}
-                    disabled={isLoading || !name}
-                    className={`rounded-xl py-4 mt-4 ${isLoading || !name ? 'bg-gray-300' : 'bg-primary-500'
+                    disabled={isLoading || !name.trim()}
+                    className={`rounded-xl py-4 mt-4 ${isLoading || !name.trim() ? 'bg-gray-300' : 'bg-primary-500'
                         }`}
                 >
                     {isLoading ? (
                         <ActivityIndicator color="white" />
                     ) : (
                         <Text className="text-white text-center font-semibold text-base">
-                            Create Category
+                            {isEditing ? 'Update Category' : 'Create Category'}
                         </Text>
                     )}
                 </TouchableOpacity>
+
+                {isEditing && (
+                    <TouchableOpacity
+                        onPress={handleDelete}
+                        disabled={isLoading}
+                        className="rounded-xl py-4 border border-red-200 bg-red-50"
+                    >
+                        <Text className="text-red-600 text-center font-semibold text-base">
+                            Delete Category
+                        </Text>
+                    </TouchableOpacity>
+                )}
             </ScrollView>
         </View>
     );

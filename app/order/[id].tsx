@@ -1,5 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useOrder, useVoidOrder } from '@/hooks/use-orders';
+import { useRole } from '@/hooks/use-role';
+import { useSubscription } from '@/hooks/use-subscription';
 import { EscPosBuilder } from '@/lib/printer/esc-pos';
 import { useAuthStore } from '@/store';
 import { usePrinterStore } from '@/store/printer';
@@ -17,6 +19,8 @@ export default function OrderDetailsScreen() {
 
     // Printer Store
     const { connectedDevice, print } = usePrinterStore();
+    const { isPro } = useSubscription();
+    const { canVoidOrders } = useRole();
 
     const getCurrencySymbol = () => {
         switch (tenant?.currency) {
@@ -44,13 +48,24 @@ export default function OrderDetailsScreen() {
                 .align('center')
                 .bold(true)
                 .textLine(tenant?.name || 'BillSnapr')
-                .bold(false)
-                .textLine(tenant?.receipt_header || '')
+                .bold(false);
+
+            // Pro users get custom header
+            if (isPro && tenant?.receipt_header) {
+                builder.textLine(tenant.receipt_header);
+            }
+
+            builder
                 .textLine('--------------------------------')
                 .align('left')
                 .textLine(`Order #: ${order.order_number}`)
-                .textLine(`Date: ${format(new Date(order.created_at), 'dd/MM/yyyy HH:mm')}`)
-                .textLine('--------------------------------');
+                .textLine(`Date: ${format(new Date(order.created_at), 'dd/MM/yyyy HH:mm')}`);
+
+            if (order.customer_name) {
+                builder.textLine(`Customer: ${order.customer_name}`);
+            }
+
+            builder.textLine('--------------------------------');
 
             // Items
             order.order_items?.forEach((item) => {
@@ -66,7 +81,7 @@ export default function OrderDetailsScreen() {
                 .bold(false)
                 .align('center')
                 .textLine('--------------------------------')
-                .textLine(tenant?.receipt_footer || 'Thank You!')
+                .textLine(isPro && tenant?.receipt_footer ? tenant.receipt_footer : 'Thank You!')
                 .feed(3)
                 .cut();
 
@@ -127,6 +142,18 @@ export default function OrderDetailsScreen() {
                         {format(new Date(order.created_at), 'MMMM d, yyyy h:mm a')}
                     </Text>
 
+                    {order.customer_name && (
+                        <>
+                            <Text className="text-text-secondary text-sm mb-1">Customer</Text>
+                            <View className="flex-row items-center gap-2 mb-3">
+                                <IconSymbol name="person.fill" size={16} color="#475569" />
+                                <Text className="text-text-primary font-medium text-base">
+                                    {order.customer_name}
+                                </Text>
+                            </View>
+                        </>
+                    )}
+
                     <Text className="text-text-secondary text-sm mb-1">Payment Method</Text>
                     <View className="flex-row items-center gap-2">
                         <IconSymbol
@@ -183,7 +210,7 @@ export default function OrderDetailsScreen() {
                             </Text>
                         </View>
                     )}
-                    <View className="h-[1px] bg-gray-200 my-2" />
+                    <View className="h-px bg-gray-200 my-2" />
                     <View className="flex-row justify-between items-center">
                         <Text className="text-lg font-bold text-text-primary">Total</Text>
                         <Text className="text-2xl font-bold text-primary-600">
@@ -205,7 +232,7 @@ export default function OrderDetailsScreen() {
                         </Text>
                     </TouchableOpacity>
 
-                    {order.status === 'completed' && (
+                    {order.status === 'completed' && canVoidOrders && (
                         <TouchableOpacity
                             onPress={handleVoid}
                             disabled={voidOrder.isPending}

@@ -17,7 +17,7 @@ export default function OnboardingWelcome() {
                     Welcome to BillSnapr!
                 </Text>
                 <Text className="text-text-secondary text-center mt-3 text-base leading-6">
-                    Let's set up your restaurant in just a few steps.
+                    Let&apos;s set up your restaurant in just a few steps.
                 </Text>
             </View>
 
@@ -47,7 +47,7 @@ export default function OnboardingWelcome() {
                 className="bg-primary-500 rounded-xl py-4"
             >
                 <Text className="text-white text-center font-semibold text-base">
-                    Let's Get Started
+                    Let&apos;s Get Started
                 </Text>
             </TouchableOpacity>
 

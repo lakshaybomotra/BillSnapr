@@ -1,12 +1,12 @@
+import { useColorScheme } from 'nativewind';
 import React from 'react';
-import { ScrollView, StatusBar, StatusBarStyle, View, ViewProps } from 'react-native';
+import { ScrollView, StatusBar, View, ViewProps } from 'react-native';
 import { SafeAreaView, SafeAreaViewProps } from 'react-native-safe-area-context';
 
 interface ScreenProps extends ViewProps {
     scrollable?: boolean;
-    safeArea?: boolean; // Default true
-    safeAreaEdges?: SafeAreaViewProps['edges']; // Default ['top']
-    statusBarStyle?: StatusBarStyle; // Default 'dark-content'
+    safeArea?: boolean;
+    safeAreaEdges?: SafeAreaViewProps['edges'];
     contentClassName?: string;
 }
 
@@ -15,27 +15,27 @@ export function Screen({
     scrollable = true,
     safeArea = true,
     safeAreaEdges = ['top', 'left', 'right'],
-    statusBarStyle = 'dark-content',
     className,
     contentClassName,
     ...props
 }: ScreenProps) {
+    const { colorScheme } = useColorScheme();
     const Container = safeArea ? SafeAreaView : View;
     const Wrapper = scrollable ? ScrollView : View;
 
     return (
         <Container
-            className={`flex-1 bg-surface ${className || ''}`}
+            className={`flex-1 bg-surface-muted ${className || ''}`}
             {...(safeArea ? { edges: safeAreaEdges } : {})}
             {...props}
         >
             <StatusBar
-                barStyle={statusBarStyle}
+                barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'}
                 backgroundColor="transparent"
                 translucent
             />
             <Wrapper
-                className={`flex-1 ${scrollable ? '' : 'px-4'}`}
+                className={'flex-1'}
                 contentContainerStyle={scrollable ? { flexGrow: 1 } : undefined}
                 showsVerticalScrollIndicator={false}
                 bounces={scrollable}
@@ -47,3 +47,4 @@ export function Screen({
         </Container>
     );
 }
+

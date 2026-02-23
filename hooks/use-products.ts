@@ -21,6 +21,7 @@ export interface Product {
     tax_rate: number;
     is_active: boolean;
     image_url: string | null;
+    stock_quantity: number | null;
     created_at: string;
     updated_at: string;
     category?: Category;
@@ -43,6 +44,7 @@ export function useProducts() {
             return data as Product[];
         },
         enabled: !!tenant,
+        networkMode: 'offlineFirst',
     });
 }
 
@@ -63,6 +65,7 @@ export function useCategories() {
             return data as Category[];
         },
         enabled: !!tenant,
+        networkMode: 'offlineFirst',
     });
 }
 
@@ -78,6 +81,7 @@ export function useCreateProduct() {
             tax_rate?: number;
             category_id?: string | null;
             image_url?: string | null;
+            stock_quantity?: number | null;
         }) => {
             if (!tenant) throw new Error('No tenant');
 
@@ -164,6 +168,49 @@ export function useCreateCategory() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
+        },
+    });
+}
+
+// Update category
+export function useUpdateCategory() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ id, ...updates }: { id: string; name?: string; image_url?: string | null }) => {
+            const { data, error } = await supabase
+                .from('categories')
+                .update(updates)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+        },
+    });
+}
+
+// Delete (soft-delete) category
+export function useDeleteCategory() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('categories')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+            queryClient.invalidateQueries({ queryKey: ['products'] });
         },
     });
 }

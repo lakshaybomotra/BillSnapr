@@ -41,4 +41,8 @@ app-example
 # generated native folders
 /ios
 /android
+.agent/
+.agent/skills/doc.md
+docs/PLAN-assets-implementation.md
+docs/PLAN-phase2-robustness.md
 .agent

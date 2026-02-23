@@ -1,6 +1,8 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useCategories, useCreateProduct, useDeleteProduct, useProducts, useUpdateProduct } from '@/hooks/use-products';
+import { useGate } from '@/hooks/use-subscription';
+import { hapticLight, hapticMedium } from '@/lib/haptics';
 import { Image } from 'expo-image';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -25,13 +27,21 @@ export default function ProductModal() {
     const [price, setPrice] = useState(productToEdit?.price?.toString() || '');
     const [imageUrl, setImageUrl] = useState(productToEdit?.image_url || '');
     const [categoryId, setCategoryId] = useState(productToEdit?.category_id || '');
+    const [trackStock, setTrackStock] = useState(productToEdit?.stock_quantity != null);
+    const [stockQuantity, setStockQuantity] = useState(productToEdit?.stock_quantity?.toString() || '');
 
     const isLoading = createProduct.isPending || updateProduct.isPending || deleteProduct.isPending || isImageUploading;
 
+    // Subscription gates
+    const productCount = products?.length ?? 0;
+    const productGate = useGate('products', productCount);
+    const stockGate = useGate('stock_tracking');
+    const isGatedCreate = !isEditing && !productGate.allowed;
+
     const handleImagePick = async () => {
-        const uri = await pickImage();
-        if (uri) {
-            const publicUrl = await uploadImage(uri);
+        const imageResult = await pickImage();
+        if (imageResult) {
+            const publicUrl = await uploadImage(imageResult);
             if (publicUrl) {
                 setImageUrl(publicUrl);
             }
@@ -41,11 +51,20 @@ export default function ProductModal() {
     const handleSave = () => {
         if (!name || !price) return;
 
+        // Block new product creation if limit reached
+        if (!isEditing && !productGate.allowed) {
+            productGate.showPaywall();
+            return;
+        }
+
+        hapticLight();
+
         const productData = {
             name,
             price: parseFloat(price),
             image_url: imageUrl || null,
             category_id: categoryId || null,
+            stock_quantity: trackStock ? parseInt(stockQuantity || '0', 10) : null,
         };
 
         if (isEditing && params.id) {
@@ -63,6 +82,7 @@ export default function ProductModal() {
 
     const handleDelete = () => {
         if (!isEditing || !params.id) return;
+        hapticMedium();
 
         Alert.alert(
             'Delete Product',
@@ -156,6 +176,48 @@ export default function ProductModal() {
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
+                </View>
+
+                {/* Stock Tracking */}
+                <View>
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (!stockGate.allowed) {
+                                stockGate.showPaywall();
+                                return;
+                            }
+                            setTrackStock(!trackStock);
+                        }}
+                        className="flex-row items-center justify-between bg-surface-subtle border border-gray-200 rounded-xl px-4 py-4 mb-2"
+                    >
+                        <View className="flex-row items-center gap-3">
+                            <IconSymbol name="shippingbox" size={18} color={trackStock ? '#00936E' : '#94A3B8'} />
+                            <View>
+                                <View className="flex-row items-center gap-2">
+                                    <Text className="text-text-primary font-medium text-base">Track Inventory</Text>
+                                    {!stockGate.allowed && (
+                                        <View className="bg-amber-100 px-1.5 py-0.5 rounded">
+                                            <Text className="text-amber-700 text-2xs font-bold">PRO</Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <Text className="text-text-muted text-xs">Enable stock tracking for this item</Text>
+                            </View>
+                        </View>
+                        <View className={`w-12 h-7 rounded-full flex-row items-center px-0.5 ${trackStock && stockGate.allowed ? 'bg-primary-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                            <View className="w-6 h-6 rounded-full bg-white shadow" />
+                        </View>
+                    </TouchableOpacity>
+                    {trackStock && (
+                        <TextInput
+                            value={stockQuantity}
+                            onChangeText={setStockQuantity}
+                            placeholder="Current stock quantity"
+                            keyboardType="number-pad"
+                            className="bg-surface-subtle border border-gray-200 rounded-xl px-4 py-4 text-text-primary text-base"
+                            placeholderTextColor="#94A3B8"
+                        />
+                    )}
                 </View>
 
                 <TouchableOpacity

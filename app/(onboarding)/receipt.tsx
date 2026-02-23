@@ -47,7 +47,7 @@ export default function ReceiptSetup() {
                 {/* Preview Card */}
                 <Card variant="flat" className="mb-6 p-6 items-center border-dashed border-2 border-gray-200 bg-gray-50">
                     <Text className="text-xs font-bold text-gray-400 mb-4 tracking-widest uppercase">Receipt Preview</Text>
-                    <View className="bg-white p-4 shadow-sm w-full max-w-[280px]">
+                    <View className="bg-white p-4 shadow-sm w-full max-w-receipt">
                         <View className="items-center border-b border-dashed border-gray-200 pb-4 mb-4">
                             <Text className="font-bold text-lg">{tenant?.name || 'Restaurant'}</Text>
                             <Text className="text-xs text-gray-500 text-center mt-1">{header || 'Address / Phone / GST'}</Text>

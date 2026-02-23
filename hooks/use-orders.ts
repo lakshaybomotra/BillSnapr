@@ -22,24 +22,55 @@ export interface Order {
     total: number;
     payment_method: 'cash' | 'card' | 'other';
     status: 'pending' | 'completed' | 'voided';
+    customer_name?: string | null;
     created_by: string;
     created_at: string;
     order_items?: OrderItem[];
 }
 
-// Fetch orders with pagination
-export function useOrders(limit = 50) {
+// Filter params for orders
+export interface OrderFilters {
+    search?: string;
+    status?: 'completed' | 'voided' | 'pending' | null;
+    dateFrom?: string; // ISO string
+    dateTo?: string;   // ISO string
+}
+
+// Fetch orders with optional filters
+export function useOrders(filters: OrderFilters = {}, limit = 50) {
     const tenant = useAuthStore((s) => s.tenant);
 
     return useQuery({
-        queryKey: ['orders', tenant?.id, limit],
+        queryKey: ['orders', tenant?.id, filters, limit],
         queryFn: async () => {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('orders')
                 .select('*, order_items(*)')
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
+            // Status filter
+            if (filters.status) {
+                query = query.eq('status', filters.status);
+            }
+
+            // Date range filter
+            if (filters.dateFrom) {
+                query = query.gte('created_at', filters.dateFrom);
+            }
+            if (filters.dateTo) {
+                query = query.lte('created_at', filters.dateTo);
+            }
+
+            // Search by order number (cast to text for ilike)
+            if (filters.search) {
+                const num = parseInt(filters.search, 10);
+                if (!isNaN(num)) {
+                    query = query.eq('order_number', num);
+                }
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
             return data as Order[];
         },
@@ -65,61 +96,74 @@ export function useOrder(orderId: string) {
     });
 }
 
-// Create order from cart
+// Order data passed as variables so it can be serialized for offline queue
+interface CreateOrderVariables {
+    tenantId: string;
+    userId: string;
+    subtotal: number;
+    taxTotal: number;
+    discountAmount: number;
+    total: number;
+    paymentMethod: string;
+    customerName?: string;
+    items: {
+        productId: string;
+        name: string;
+        price: number;
+        quantity: number;
+        taxRate: number;
+    }[];
+}
+
+// Standalone mutation function — exported so _layout.tsx can register it
+// via setMutationDefaults for persisted offline mutations to resume.
+export async function createOrderMutationFn(vars: CreateOrderVariables) {
+    // Create order
+    const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+            tenant_id: vars.tenantId,
+            subtotal: vars.subtotal,
+            tax_total: vars.taxTotal,
+            discount_amount: vars.discountAmount,
+            total: vars.total,
+            payment_method: vars.paymentMethod,
+            customer_name: vars.customerName || null,
+            status: 'completed',
+            created_by: vars.userId,
+        })
+        .select()
+        .single();
+
+    if (orderError) throw orderError;
+
+    // Create order items
+    const orderItems = vars.items.map((item) => ({
+        order_id: order.id,
+        product_id: item.productId,
+        product_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        tax_rate: item.taxRate,
+    }));
+
+    const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+    if (itemsError) throw itemsError;
+
+    return order as Order;
+}
+
+// Create order from cart — supports offline queue
 export function useCreateOrder() {
     const queryClient = useQueryClient();
-    const tenant = useAuthStore((s) => s.tenant);
-    const user = useAuthStore((s) => s.user);
     const cart = useCartStore();
 
     return useMutation({
-        mutationFn: async () => {
-            if (!tenant || !user) throw new Error('Not authenticated');
-            if (cart.items.length === 0) throw new Error('Cart is empty');
-            if (!cart.paymentMethod) throw new Error('Payment method required');
-
-            // Calculate totals
-            const subtotal = cart.subtotal();
-            const taxTotal = cart.taxTotal();
-            const discountAmount = cart.discountAmount();
-            const total = cart.total();
-
-            // Create order
-            const { data: order, error: orderError } = await supabase
-                .from('orders')
-                .insert({
-                    tenant_id: tenant.id,
-                    subtotal,
-                    tax_total: taxTotal,
-                    discount_amount: discountAmount,
-                    total,
-                    payment_method: cart.paymentMethod,
-                    status: 'completed',
-                    created_by: user.id,
-                })
-                .select()
-                .single();
-
-            if (orderError) throw orderError;
-
-            // Create order items
-            const orderItems = cart.items.map((item) => ({
-                order_id: order.id,
-                product_id: item.productId,
-                product_name: item.name,
-                price: item.price,
-                quantity: item.quantity,
-                tax_rate: item.taxRate,
-            }));
-
-            const { error: itemsError } = await supabase
-                .from('order_items')
-                .insert(orderItems);
-
-            if (itemsError) throw itemsError;
-
-            return order as Order;
-        },
+        mutationKey: ['create-order'],
+        mutationFn: createOrderMutationFn,
         onSuccess: () => {
             cart.clearCart();
             queryClient.invalidateQueries({ queryKey: ['orders'] });

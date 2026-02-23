@@ -1,35 +1,67 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useProducts } from '@/hooks/use-products';
+import { useCategories, useProducts } from '@/hooks/use-products';
+import { useRole } from '@/hooks/use-role';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore } from '@/store';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { FlatList, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProductsScreen() {
     const router = useRouter();
     const { data: products, isLoading, refetch } = useProducts();
+    const { data: categories } = useCategories();
     const tenant = useAuthStore((s) => s.tenant);
+    const { canManageProducts } = useRole();
 
-    const getCurrencySymbol = () => {
-        switch (tenant?.currency) {
-            case 'USD': return '$';
-            case 'EUR': return '€';
-            case 'GBP': return '£';
-            default: return '₹';
-        }
-    };
+
 
     return (
-        <SafeAreaView className="flex-1 bg-surface" edges={['top']}>
-            <View className="px-5 py-4 flex-row justify-between items-center bg-white border-b border-gray-100">
-                <Text className="text-2xl font-bold text-text-primary">Products</Text>
-                <TouchableOpacity
-                    onPress={() => router.push('/modal-category')}
-                    className="bg-surface-subtle px-4 py-2 rounded-full border border-gray-200"
+        <SafeAreaView className="flex-1 bg-surface dark:bg-slate-900" edges={['top']}>
+            <View className="px-5 py-4 flex-row justify-between items-center bg-white border-b border-gray-100 dark:border-slate-700 dark:border-slate-700">
+                <Text className="text-2xl font-bold text-text-primary dark:text-slate-100 dark:text-slate-100">Products</Text>
+            </View>
+
+            {/* Category Management Row */}
+            <View className="bg-white border-b border-gray-100 dark:bg-slate-800 dark:border-slate-700 py-3">
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}
                 >
-                    <Text className="text-text-primary font-medium text-sm">New Category</Text>
-                </TouchableOpacity>
+                    {categories?.map((cat) => (
+                        <TouchableOpacity
+                            key={cat.id}
+                            onPress={canManageProducts ? () => router.push({
+                                pathname: '/modal-category',
+                                params: { id: cat.id, name: cat.name, image_url: cat.image_url || '' },
+                            }) : undefined}
+                            activeOpacity={canManageProducts ? 0.7 : 1}
+                            className="flex-row items-center bg-surface-subtle dark:bg-slate-700 px-3 py-2 rounded-full border border-gray-200 dark:border-slate-600 gap-2"
+                        >
+                            {cat.image_url ? (
+                                <Image source={{ uri: cat.image_url }} style={{ width: 20, height: 20, borderRadius: 10 }} contentFit="cover" />
+                            ) : (
+                                <View className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900 items-center justify-center">
+                                    <Text className="text-primary-700 dark:text-primary-300 text-xxs font-bold">{cat.name.charAt(0)}</Text>
+                                </View>
+                            )}
+                            <Text className="text-text-primary dark:text-slate-100 font-medium text-sm">{cat.name}</Text>
+                            {canManageProducts && <IconSymbol name="pencil" size={12} color="#94A3B8" />}
+                        </TouchableOpacity>
+                    ))}
+                    {canManageProducts && (
+                        <TouchableOpacity
+                            onPress={() => router.push('/modal-category')}
+                            activeOpacity={0.7}
+                            className="flex-row items-center bg-primary-50 dark:bg-primary-900/30 px-3 py-2 rounded-full border border-primary-200 dark:border-primary-700 gap-1.5"
+                        >
+                            <IconSymbol name="plus" size={14} color="#00936E" />
+                            <Text className="text-primary-600 dark:text-primary-400 font-semibold text-sm">New</Text>
+                        </TouchableOpacity>
+                    )}
+                </ScrollView>
             </View>
 
             <FlatList
@@ -41,19 +73,20 @@ export default function ProductsScreen() {
                 }
                 ListEmptyComponent={
                     <View className="flex-1 items-center justify-center py-20">
-                        <View className="w-16 h-16 bg-surface-subtle rounded-full items-center justify-center mb-4">
+                        <View className="w-16 h-16 bg-surface-subtle dark:bg-slate-800 rounded-full items-center justify-center mb-4">
                             <Text className="text-3xl">🍽️</Text>
                         </View>
-                        <Text className="text-text-primary text-lg font-semibold">No products yet</Text>
-                        <Text className="text-text-muted text-sm mt-1 mb-6">Start building your menu.</Text>
+                        <Text className="text-text-primary dark:text-slate-100 text-lg font-semibold">No products yet</Text>
+                        <Text className="text-text-muted dark:text-slate-500 text-sm mt-1 mb-6">Start building your menu.</Text>
                     </View>
                 }
                 renderItem={({ item }) => (
                     <TouchableOpacity
-                        onPress={() => router.push({ pathname: '/modal-product', params: { id: item.id } })}
-                        className="flex-row items-center bg-white p-4 mb-3 rounded-2xl border border-gray-100 shadow-sm active:bg-gray-50"
+                        onPress={canManageProducts ? () => router.push({ pathname: '/modal-product', params: { id: item.id } }) : undefined}
+                        activeOpacity={canManageProducts ? 0.7 : 1}
+                        className="flex-row items-center bg-white p-4 mb-3 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm dark:bg-slate-800"
                     >
-                        <View className="w-14 h-14 bg-surface-subtle rounded-xl items-center justify-center mr-4 border border-gray-50 overflow-hidden">
+                        <View className="w-14 h-14 bg-surface-subtle dark:bg-slate-800 rounded-xl items-center justify-center mr-4 border border-gray-50 dark:border-slate-700 overflow-hidden">
                             {item.image_url ? (
                                 <Image source={{ uri: item.image_url }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                             ) : (
@@ -61,7 +94,7 @@ export default function ProductsScreen() {
                             )}
                         </View>
                         <View className="flex-1">
-                            <Text className="text-text-primary font-semibold text-lg">{item.name}</Text>
+                            <Text className="text-text-primary dark:text-slate-100 font-semibold text-lg">{item.name}</Text>
                             {item.category && (
                                 <View className="flex-row mt-1 items-center">
                                     <View className="bg-primary-50 px-2.5 py-0.5 rounded-md border border-primary-100 flex-row items-center gap-1">
@@ -76,28 +109,49 @@ export default function ProductsScreen() {
                             )}
                         </View>
                         <View className="items-end">
-                            <Text className="text-text-primary font-bold text-lg">
-                                {getCurrencySymbol()}{item.price.toFixed(2)}
+                            <Text className="text-text-primary dark:text-slate-100 font-bold text-lg">
+                                {getCurrencySymbol(tenant?.currency)}{item.price.toFixed(2)}
                             </Text>
                             <View className="flex-row items-center mt-1">
-                                <View className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
-                                <Text className="text-text-muted text-xs font-medium">In Stock</Text>
+                                {item.stock_quantity == null ? (
+                                    <>
+                                        <View className="w-2 h-2 rounded-full bg-gray-400 mr-1.5" />
+                                        <Text className="text-text-muted dark:text-slate-500 text-xs font-medium">Untracked</Text>
+                                    </>
+                                ) : item.stock_quantity === 0 ? (
+                                    <>
+                                        <View className="w-2 h-2 rounded-full bg-red-500 mr-1.5" />
+                                        <Text className="text-red-600 dark:text-red-400 text-xs font-medium">Out of Stock</Text>
+                                    </>
+                                ) : item.stock_quantity <= 5 ? (
+                                    <>
+                                        <View className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" />
+                                        <Text className="text-amber-600 text-xs font-medium">Low: {item.stock_quantity}</Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <View className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
+                                        <Text className="text-text-muted dark:text-slate-500 text-xs font-medium">Stock: {item.stock_quantity}</Text>
+                                    </>
+                                )}
                             </View>
                         </View>
                     </TouchableOpacity>
                 )}
             />
 
-            {/* Floating Action Button */}
-            <View className="absolute bottom-6 right-5">
-                <TouchableOpacity
-                    onPress={() => router.push('/modal-product')}
-                    className="w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-xl border border-white/20"
-                    activeOpacity={0.9}
-                >
-                    <IconSymbol name="plus" size={28} color="white" />
-                </TouchableOpacity>
-            </View>
+            {/* Floating Action Button — only for managers and admins */}
+            {canManageProducts && (
+                <View className="absolute bottom-6 right-5">
+                    <TouchableOpacity
+                        onPress={() => router.push('/modal-product')}
+                        className="w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-xl border border-white/20"
+                        activeOpacity={0.9}
+                    >
+                        <IconSymbol name="plus" size={28} color="white" />
+                    </TouchableOpacity>
+                </View>
+            )}
         </SafeAreaView>
     );
 }

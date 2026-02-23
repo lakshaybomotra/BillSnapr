@@ -1,7 +1,60 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
-import { Alert } from 'react-native';
+import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import RNBluetoothClassic, { BluetoothDevice } from 'react-native-bluetooth-classic';
 import { create } from 'zustand';
+
+const STORAGE_KEY = 'billsnapr-last-printer';
+
+async function requestAndroidPermissions() {
+    if (Platform.OS === 'android') {
+        // Android 12+ (API 31+)
+        if (Platform.Version >= 31) {
+            const result = await PermissionsAndroid.requestMultiple([
+                PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+                PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+            ]);
+
+            return (
+                result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
+                result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED
+            );
+        }
+        // Android < 12
+        else {
+            const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                {
+                    title: 'Location Permission',
+                    message: 'Bluetooth scanning requires location access',
+                    buttonNeutral: 'Ask Me Later',
+                    buttonNegative: 'Cancel',
+                    buttonPositive: 'OK',
+                }
+            );
+            return granted === PermissionsAndroid.RESULTS.GRANTED;
+        }
+    }
+    return true;
+}
+
+async function saveLastPrinter(deviceId: string, deviceName: string | null) {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ id: deviceId, name: deviceName }));
+}
+
+async function clearLastPrinter() {
+    await AsyncStorage.removeItem(STORAGE_KEY);
+}
+
+async function getLastPrinter(): Promise<{ id: string; name: string | null } | null> {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+}
 
 export interface PrinterDevice {
     id: string;
@@ -14,11 +67,13 @@ interface PrinterState {
     isConnecting: boolean;
     connectedDevice: BluetoothDevice | null;
     scannedDevices: PrinterDevice[];
+    lastDeviceName: string | null;
 
-    startScan: () => Promise<void>; // This will now fetch paired devices
+    startScan: () => Promise<void>;
     connect: (deviceId: string) => Promise<void>;
     disconnect: () => Promise<void>;
     print: (data: Buffer) => Promise<void>;
+    tryAutoReconnect: () => Promise<void>;
 }
 
 export const usePrinterStore = create<PrinterState>((set, get) => ({
@@ -26,11 +81,24 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     isConnecting: false,
     connectedDevice: null,
     scannedDevices: [],
+    lastDeviceName: null,
 
     startScan: async () => {
-        // Just fetch bonded devices for Classic Bluetooth (Users must pair in settings first)
         set({ isScanning: true, scannedDevices: [] });
         try {
+            if (Platform.OS === 'android') {
+                const granted = await requestAndroidPermissions();
+                if (!granted) {
+                    Alert.alert(
+                        'Permission Required',
+                        'Bluetooth scanning requires "Nearby Devices" permission. Please enable it in App Settings.',
+                        [{ text: 'OK' }]
+                    );
+                    set({ isScanning: false });
+                    return;
+                }
+            }
+
             const paired = await RNBluetoothClassic.getBondedDevices();
             const devices = paired.map(d => ({
                 id: d.address,
@@ -38,9 +106,9 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
                 address: d.address
             }));
             set({ scannedDevices: devices });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to get bonded devices', error);
-            Alert.alert('Error', 'Could not fetch paired devices. Make sure Bluetooth is on.');
+            Alert.alert('Scan Failed', error?.message || 'Could not fetch paired devices.');
         } finally {
             set({ isScanning: false });
         }
@@ -50,28 +118,38 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
         set({ isConnecting: true });
 
         try {
-            // Check if already connected logic if needed, but simple connect is fine
-            // Note: connectToDevice returns a wrapper, or we get it from bonding
-            // In RNBluetoothClassic, we usually connect directly via the module or device instance
-
-            // First disconnect any existing
             const { connectedDevice } = get();
             if (connectedDevice) {
                 await connectedDevice.disconnect();
             }
 
-            console.log(`Connecting to ${deviceId}...`);
             const connected = await RNBluetoothClassic.connectToDevice(deviceId);
 
             if (connected) {
-                set({ connectedDevice: connected });
+                set({
+                    connectedDevice: connected,
+                    lastDeviceName: connected.name || null,
+                });
+                // Persist for auto-reconnect
+                await saveLastPrinter(deviceId, connected.name || null);
                 Alert.alert('Connected', `Connected to ${connected.name || 'Printer'}`);
             } else {
                 throw new Error('Connection returned false');
             }
         } catch (error: any) {
             console.error('Connection failed:', error);
-            Alert.alert('Connection Failed', error?.message || 'Could not connect to printer.');
+
+            let message = error?.message || 'Could not connect to printer.';
+
+            if (message.includes('socket might closed') || message.includes('read failed')) {
+                message = 'Could not communicate with device. Ensure it is a Printer, it is turned ON, and is within range.';
+            } else if (message.includes('run out of time')) {
+                message = 'Connection timed out. Please try again.';
+            } else if (message.includes('Broken pipe')) {
+                message = 'Connection disconnected unexpectedly.';
+            }
+
+            Alert.alert('Connection Failed', message);
             set({ connectedDevice: null });
         } finally {
             set({ isConnecting: false });
@@ -88,6 +166,7 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
             }
             set({ connectedDevice: null });
         }
+        await clearLastPrinter();
     },
 
     print: async (data: Buffer) => {
@@ -97,26 +176,42 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
         try {
             const isConnected = await connectedDevice.isConnected();
             if (!isConnected) {
-                // Try to reconnect?
                 throw new Error('Device is no longer connected');
             }
 
-            // RNBluetoothClassic expects base64 for binary
-            // It has a write method: write(data: string, encoding?: 'utf-8' | 'base64' | 'hex')
             const base64Data = data.toString('base64');
-
-            // Note: Check library version for exact signature.
-            // Assuming standard v1.60+ signature: write(data, encoding)
             await connectedDevice.write(base64Data, 'base64');
-
-            // Flow control isn't usually needed for Blocking Socket (SPP), but large images might need chunking.
-            // The library often handles this, but let's assume it puts it on the socket stream using flush.
-
-            console.log('Print data sent successfully');
-
         } catch (error) {
             console.error('Print Error:', error);
             throw error;
+        }
+    },
+
+    // Silent auto-reconnect — no alerts on failure
+    tryAutoReconnect: async () => {
+        const { connectedDevice } = get();
+        if (connectedDevice) return; // Already connected
+
+        const saved = await getLastPrinter();
+        if (!saved) return; // No saved printer
+
+        set({ lastDeviceName: saved.name });
+
+        try {
+            if (Platform.OS === 'android') {
+                const granted = await requestAndroidPermissions();
+                if (!granted) return;
+            }
+
+            const connected = await RNBluetoothClassic.connectToDevice(saved.id);
+            if (connected) {
+                set({
+                    connectedDevice: connected,
+                    lastDeviceName: connected.name || null,
+                });
+            }
+        } catch {
+            // Silent failure — printer may be off or out of range
         }
     },
 }));

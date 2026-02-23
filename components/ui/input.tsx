@@ -25,14 +25,14 @@ export function Input({
             )}
 
             <View className={`
-        flex-row items-center
-        bg-surface-subtle border rounded-xl px-4
-        ${error ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-primary-500'}
-      `}>
+ flex-row items-center
+ bg-surface-subtle border rounded-xl px-4
+ ${error ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-primary-500'}
+ `}>
                 {leftIcon && <View className="mr-3">{leftIcon}</View>}
 
                 <TextInput
-                    className="flex-1 py-3.5 text-text-primary text-base min-h-[48px]"
+                    className="flex-1 py-3.5 text-text-primary text-base min-h-input"
                     placeholderTextColor="#94A3B8"
                     {...props}
                 />

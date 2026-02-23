@@ -3,9 +3,9 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/input';
 import { Screen } from '@/components/ui/screen';
 import { useUpdateProfile } from '@/hooks/use-auth';
-import { supabase } from '@/lib/supabase';
+import { useCreateProduct } from '@/hooks/use-products';
 import { useAuthStore } from '@/store';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
@@ -14,31 +14,34 @@ export default function FirstProductSetup() {
     const tenant = useAuthStore((s) => s.tenant);
     const [name, setName] = useState('');
     const [price, setPrice] = useState('');
-    const queryClient = useQueryClient();
-    const updateProfile = useUpdateProfile();
 
-    const createProduct = useMutation({
-        mutationFn: async () => {
-            if (!tenant) throw new Error('No tenant');
-            const { error } = await supabase.from('products').insert({
-                tenant_id: tenant.id,
-                name,
-                price: parseFloat(price),
-                tax_rate: 0,
-            });
-            if (error) throw error;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-        },
-    });
+    // Hooks
+    const createProduct = useCreateProduct();
+    const updateProfile = useUpdateProfile();
+    const queryClient = useQueryClient();
 
     const handleFinish = async () => {
-        if (name && price) {
-            await createProduct.mutateAsync();
+        try {
+            if (name && price) {
+                await createProduct.mutateAsync({
+                    name,
+                    price: parseFloat(price),
+                    tax_rate: 0,
+                    category_id: null // Default to no category for first product
+                });
+            }
+
+            // Mark as onboarded
+            await updateProfile.mutateAsync({ is_onboarded: true });
+
+            // Force refresh of profile to update global state
+            queryClient.invalidateQueries({ queryKey: ['profile'] });
+
+            router.replace('/(tabs)');
+        } catch (error) {
+            console.error('Error finishing onboarding:', error);
+            // Optional: Add Alert here if needed
         }
-        await updateProfile.mutateAsync({ is_onboarded: true });
-        router.replace('/(tabs)');
     };
 
     const isLoading = createProduct.isPending || updateProfile.isPending;
@@ -58,10 +61,10 @@ export default function FirstProductSetup() {
                 </View>
 
                 {/* Header */}
-                <Text className="text-2xl font-bold text-text-primary mb-2">
+                <Text className="text-2xl font-bold text-text-primary dark:text-slate-100 mb-2">
                     Add your first product
                 </Text>
-                <Text className="text-text-secondary mb-8 leading-5">
+                <Text className="text-text-secondary dark:text-slate-400 mb-8 leading-5">
                     Start selling immediately. You can add more later.
                 </Text>
 
@@ -86,15 +89,15 @@ export default function FirstProductSetup() {
 
                     {/* Quick Suggestions */}
                     <View>
-                        <Text className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">Quick Suggestions</Text>
+                        <Text className="text-xs font-semibold text-text-muted dark:text-slate-500 mb-3 uppercase tracking-wider">Quick Suggestions</Text>
                         <View className="flex-row flex-wrap gap-2">
                             {['Chicken Biryani', 'Paneer Tikka', 'Masala Dosa', 'Coffee'].map((suggestion) => (
                                 <TouchableOpacity
                                     key={suggestion}
                                     onPress={() => setName(suggestion)}
-                                    className="bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm active:bg-gray-50"
+                                    className="bg-white border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 shadow-sm dark:bg-slate-800"
                                 >
-                                    <Text className="text-text-secondary text-sm font-medium">{suggestion}</Text>
+                                    <Text className="text-text-secondary dark:text-slate-400 text-sm font-medium">{suggestion}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>

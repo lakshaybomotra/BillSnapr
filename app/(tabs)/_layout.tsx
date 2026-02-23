@@ -1,22 +1,29 @@
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useRole } from '@/hooks/use-role';
+import { useColorScheme } from 'nativewind';
 
 export default function TabLayout() {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const { canViewDashboard } = useRole();
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#00936E',
-        tabBarInactiveTintColor: '#94A3B8',
+        tabBarInactiveTintColor: isDark ? '#64748B' : '#94A3B8',
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: '#F1F5F9',
-          height: 60,
-          paddingBottom: 8,
+          borderTopColor: isDark ? '#1E293B' : '#F1F5F9',
+          height: Platform.OS === 'android' ? 70 : 60,
+          paddingBottom: Platform.OS === 'android' ? 12 : 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -25,6 +32,14 @@ export default function TabLayout() {
         },
       }}
     >
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Dashboard',
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="chart.bar.fill" color={color} />,
+          href: canViewDashboard ? '/dashboard' : null,
+        }}
+      />
       <Tabs.Screen
         name="index"
         options={{
@@ -56,3 +71,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
