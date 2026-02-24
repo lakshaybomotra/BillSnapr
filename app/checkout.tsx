@@ -83,10 +83,12 @@ export default function CheckoutScreen() {
             customerName: customerName.trim() || undefined,
             items: cart.items.map((item) => ({
                 productId: item.productId,
-                name: item.name,
+                name: item.variantName ? `${item.name} (${item.variantName})` : item.name,
                 price: item.price,
                 quantity: item.quantity,
                 taxRate: item.taxRate,
+                variantId: item.variantId,
+                variantName: item.variantName,
             })),
         };
 
@@ -163,7 +165,8 @@ export default function CheckoutScreen() {
             builder.align('left');
 
             cart.items.forEach(item => {
-                builder.textLine(`${item.quantity}x ${item.name}`);
+                const displayName = item.variantName ? `${item.name} (${item.variantName})` : item.name;
+                builder.textLine(`${item.quantity}x ${displayName}`);
                 builder.align('right').textLine(`${getCurrencySymbol(tenant?.currency)}${item.price.toFixed(2)}`).align('left');
             });
 
@@ -216,7 +219,8 @@ export default function CheckoutScreen() {
 
             // Items
             cart.items.forEach(item => {
-                builder.textLine(`${item.quantity}x ${item.name}`);
+                const displayName = item.variantName ? `${item.name} (${item.variantName})` : item.name;
+                builder.textLine(`${item.quantity}x ${displayName}`);
                 builder.align('right').textLine(`${getCurrencySymbol(tenant?.currency)}${item.price.toFixed(2)}`).align('left');
             });
 
@@ -309,9 +313,12 @@ export default function CheckoutScreen() {
                 {/* Cart Items */}
                 <View className="gap-3 mb-6">
                     {cart.items.map((item) => (
-                        <View key={item.productId} className="flex-row items-center bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                        <View key={`${item.productId}::${item.variantId || ''}`} className="flex-row items-center bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
                             <View className="flex-1">
                                 <Text className="text-text-primary font-medium text-base">{item.name}</Text>
+                                {item.variantName && (
+                                    <Text className="text-text-muted text-xs">{item.variantName}</Text>
+                                )}
                                 <Text className="text-primary-600 font-semibold">
                                     {getCurrencySymbol(tenant?.currency)}{(item.price * item.quantity).toFixed(2)}
                                 </Text>
@@ -324,14 +331,14 @@ export default function CheckoutScreen() {
 
                             <View className="flex-row items-center bg-gray-50 rounded-lg border border-gray-200">
                                 <TouchableOpacity
-                                    onPress={() => cart.updateQuantity(item.productId, item.quantity - 1)}
+                                    onPress={() => cart.updateQuantity(item.productId, item.quantity - 1, item.variantId)}
                                     className="p-2 w-8 items-center"
                                 >
                                     <Text className="text-lg font-bold text-gray-400">-</Text>
                                 </TouchableOpacity>
                                 <Text className="w-6 text-center font-semibold text-text-primary">{item.quantity}</Text>
                                 <TouchableOpacity
-                                    onPress={() => cart.updateQuantity(item.productId, item.quantity + 1)}
+                                    onPress={() => cart.updateQuantity(item.productId, item.quantity + 1, item.variantId)}
                                     className="p-2 w-8 items-center"
                                 >
                                     <Text className="text-lg font-bold text-primary-500">+</Text>

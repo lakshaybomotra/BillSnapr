@@ -7,6 +7,8 @@ export interface OrderItem {
     order_id: string;
     product_id: string | null;
     product_name: string;
+    variant_id: string | null;
+    variant_name: string | null;
     price: number;
     quantity: number;
     tax_rate: number;
@@ -112,6 +114,8 @@ interface CreateOrderVariables {
         price: number;
         quantity: number;
         taxRate: number;
+        variantId?: string;
+        variantName?: string;
     }[];
 }
 
@@ -145,6 +149,8 @@ export async function createOrderMutationFn(vars: CreateOrderVariables) {
         price: item.price,
         quantity: item.quantity,
         tax_rate: item.taxRate,
+        variant_id: item.variantId || null,
+        variant_name: item.variantName || null,
     }));
 
     const { error: itemsError } = await supabase

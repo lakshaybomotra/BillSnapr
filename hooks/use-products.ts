@@ -12,6 +12,18 @@ export interface Category {
     created_at: string;
 }
 
+export interface ProductVariant {
+    id: string;
+    tenant_id: string;
+    product_id: string;
+    name: string;
+    price: number;
+    sort_order: number;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Product {
     id: string;
     tenant_id: string;
@@ -25,6 +37,7 @@ export interface Product {
     created_at: string;
     updated_at: string;
     category?: Category;
+    variants?: ProductVariant[];
 }
 
 // Fetch all products for tenant
@@ -36,7 +49,7 @@ export function useProducts() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('products')
-                .select('*, category:categories(*)')
+                .select('*, category:categories(*), variants:product_variants(*)')
                 .eq('is_active', true)
                 .order('name');
 
@@ -134,6 +147,76 @@ export function useDeleteProduct() {
             const { error } = await supabase
                 .from('products')
                 .update({ is_active: false })
+                .eq('id', id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+        },
+    });
+}
+
+// Create variant
+export function useCreateVariant() {
+    const queryClient = useQueryClient();
+    const tenant = useAuthStore((s) => s.tenant);
+
+    return useMutation({
+        mutationFn: async (variant: {
+            product_id: string;
+            name: string;
+            price: number;
+            sort_order?: number;
+        }) => {
+            if (!tenant) throw new Error('No tenant');
+
+            const { data, error } = await supabase
+                .from('product_variants')
+                .insert({ ...variant, tenant_id: tenant.id })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+        },
+    });
+}
+
+// Update variant
+export function useUpdateVariant() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ id, ...updates }: { id: string; name?: string; price?: number; sort_order?: number }) => {
+            const { data, error } = await supabase
+                .from('product_variants')
+                .update(updates)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+        },
+    });
+}
+
+// Delete variant
+export function useDeleteVariant() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('product_variants')
+                .delete()
                 .eq('id', id);
 
             if (error) throw error;

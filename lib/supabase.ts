@@ -5,24 +5,25 @@ import { Platform } from 'react-native';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Secure storage adapter for React Native
+// Secure storage adapter — falls back to localStorage on web/Node
 const ExpoSecureStoreAdapter = {
     getItem: async (key: string) => {
         if (Platform.OS === 'web') {
-            return localStorage.getItem(key);
+            if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
+            return null;
         }
         return SecureStore.getItemAsync(key);
     },
     setItem: async (key: string, value: string) => {
         if (Platform.OS === 'web') {
-            localStorage.setItem(key, value);
+            if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
             return;
         }
         await SecureStore.setItemAsync(key, value);
     },
     removeItem: async (key: string) => {
         if (Platform.OS === 'web') {
-            localStorage.removeItem(key);
+            if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
             return;
         }
         await SecureStore.deleteItemAsync(key);

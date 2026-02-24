@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useImageUpload } from '@/hooks/use-image-upload';
-import { useCategories, useCreateProduct, useDeleteProduct, useProducts, useUpdateProduct } from '@/hooks/use-products';
+import { useCategories, useCreateProduct, useCreateVariant, useDeleteProduct, useDeleteVariant, useProducts, useUpdateProduct } from '@/hooks/use-products';
 import { useGate } from '@/hooks/use-subscription';
 import { hapticLight, hapticMedium } from '@/lib/haptics';
 import { Image } from 'expo-image';
@@ -17,6 +17,8 @@ export default function ProductModal() {
     const createProduct = useCreateProduct();
     const updateProduct = useUpdateProduct();
     const deleteProduct = useDeleteProduct();
+    const createVariant = useCreateVariant();
+    const deleteVariant = useDeleteVariant();
     const { pickImage, uploadImage, isUploading: isImageUploading } = useImageUpload();
 
     const productToEdit = isEditing
@@ -29,8 +31,10 @@ export default function ProductModal() {
     const [categoryId, setCategoryId] = useState(productToEdit?.category_id || '');
     const [trackStock, setTrackStock] = useState(productToEdit?.stock_quantity != null);
     const [stockQuantity, setStockQuantity] = useState(productToEdit?.stock_quantity?.toString() || '');
+    const [newVariantName, setNewVariantName] = useState('');
+    const [newVariantPrice, setNewVariantPrice] = useState('');
 
-    const isLoading = createProduct.isPending || updateProduct.isPending || deleteProduct.isPending || isImageUploading;
+    const isLoading = createProduct.isPending || updateProduct.isPending || deleteProduct.isPending || isImageUploading || createVariant.isPending || deleteVariant.isPending;
 
     // Subscription gates
     const productCount = products?.length ?? 0;
@@ -75,7 +79,15 @@ export default function ProductModal() {
         } else {
             createProduct.mutate(
                 productData,
-                { onSuccess: () => router.back() }
+                {
+                    onSuccess: (newProduct) => {
+                        // Redirect to edit mode so user can add variants immediately
+                        router.replace({
+                            pathname: '/modal-product',
+                            params: { id: newProduct.id },
+                        });
+                    }
+                }
             );
         }
     };
@@ -219,6 +231,86 @@ export default function ProductModal() {
                         />
                     )}
                 </View>
+
+                {/* Variants Section (only when editing) */}
+                {isEditing && params.id && (
+                    <View>
+                        <Text className="text-text-secondary text-sm mb-2">Variants (Half/Full, S/M/L)</Text>
+
+                        {/* Existing variants */}
+                        {productToEdit?.variants && productToEdit.variants.length > 0 && (
+                            <View className="gap-2 mb-3">
+                                {productToEdit.variants.map((v) => (
+                                    <View key={v.id} className="flex-row items-center bg-surface-subtle border border-gray-200 rounded-xl px-4 py-3">
+                                        <View className="flex-1">
+                                            <Text className="text-text-primary font-medium">{v.name}</Text>
+                                            <Text className="text-primary-600 font-semibold text-sm">
+                                                {v.price.toFixed(2)}
+                                            </Text>
+                                        </View>
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                Alert.alert('Delete Variant', `Remove "${v.name}"?`, [
+                                                    { text: 'Cancel', style: 'cancel' },
+                                                    {
+                                                        text: 'Delete', style: 'destructive',
+                                                        onPress: () => deleteVariant.mutate(v.id),
+                                                    },
+                                                ]);
+                                            }}
+                                            disabled={isLoading}
+                                        >
+                                            <IconSymbol name="trash" size={18} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+
+                        {/* Add new variant */}
+                        <View className="flex-row items-end gap-2">
+                            <View className="flex-1">
+                                <TextInput
+                                    value={newVariantName}
+                                    onChangeText={setNewVariantName}
+                                    placeholder="e.g. Half Plate"
+                                    className="bg-surface-subtle border border-gray-200 rounded-xl px-4 py-3 text-text-primary text-sm"
+                                    placeholderTextColor="#94A3B8"
+                                />
+                            </View>
+                            <View className="w-24">
+                                <TextInput
+                                    value={newVariantPrice}
+                                    onChangeText={setNewVariantPrice}
+                                    placeholder="Price"
+                                    keyboardType="decimal-pad"
+                                    className="bg-surface-subtle border border-gray-200 rounded-xl px-4 py-3 text-text-primary text-sm"
+                                    placeholderTextColor="#94A3B8"
+                                />
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    if (!newVariantName.trim() || !newVariantPrice.trim()) return;
+                                    createVariant.mutate({
+                                        product_id: params.id!,
+                                        name: newVariantName.trim(),
+                                        price: parseFloat(newVariantPrice),
+                                        sort_order: (productToEdit?.variants?.length || 0),
+                                    }, {
+                                        onSuccess: () => {
+                                            setNewVariantName('');
+                                            setNewVariantPrice('');
+                                        },
+                                    });
+                                }}
+                                disabled={isLoading || !newVariantName.trim() || !newVariantPrice.trim()}
+                                className={`w-11 h-11 rounded-xl items-center justify-center ${isLoading || !newVariantName.trim() || !newVariantPrice.trim() ? 'bg-gray-200' : 'bg-primary-500'}`}
+                            >
+                                <IconSymbol name="plus" size={18} color="white" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
 
                 <TouchableOpacity
                     onPress={handleSave}

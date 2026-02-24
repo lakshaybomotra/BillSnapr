@@ -92,8 +92,16 @@ export function ProductCard({ item, quantityInCart, onAddToCart, currencySymbol 
                     {item.name}
                 </Text>
                 <Text className="text-primary-600 font-bold text-sm mt-0.5">
-                    {currencySymbol}{item.price.toFixed(2)}
+                    {item.variants && item.variants.length > 0
+                        ? `${currencySymbol}${Math.min(...item.variants.map(v => v.price)).toFixed(2)}+`
+                        : `${currencySymbol}${item.price.toFixed(2)}`
+                    }
                 </Text>
+                {item.variants && item.variants.length > 0 && (
+                    <Text className="text-text-muted text-2xs mt-0.5">
+                        {item.variants.length} {item.variants.length === 1 ? 'variant' : 'variants'}
+                    </Text>
+                )}
             </View>
         </TouchableOpacity>
     );

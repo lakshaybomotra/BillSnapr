@@ -6,7 +6,13 @@ interface CartItem {
     price: number;
     quantity: number;
     taxRate: number;
+    variantId?: string;
+    variantName?: string;
 }
+
+// Composite key for cart item identity
+const cartItemKey = (item: { productId: string; variantId?: string }) =>
+    `${item.productId}::${item.variantId || ''}`;
 
 interface CartState {
     items: CartItem[];
@@ -21,12 +27,13 @@ interface CartState {
     taxTotal: () => number;
     discountAmount: () => number;
     total: () => number;
+    getProductTotalQuantity: (productId: string) => number;
 
     // Actions
     addItem: (product: Omit<CartItem, 'quantity'>) => void;
-    removeItem: (productId: string) => void;
-    updateQuantity: (productId: string, quantity: number) => void;
-    setPaymentMethod: (method: CartItem['quantity'] extends number ? 'cash' | 'card' | 'other' : never) => void;
+    removeItem: (productId: string, variantId?: string) => void;
+    updateQuantity: (productId: string, quantity: number, variantId?: string) => void;
+    setPaymentMethod: (method: 'cash' | 'card' | 'other') => void;
     applyDiscount: (discount: CartState['discount']) => void;
     clearCart: () => void;
 }
@@ -60,30 +67,39 @@ export const useCartStore = create<CartState>((set, get) => ({
         return get().subtotal() + get().taxTotal() - get().discountAmount();
     },
 
+    getProductTotalQuantity: (productId: string) => {
+        return get().items
+            .filter(i => i.productId === productId)
+            .reduce((sum, i) => sum + i.quantity, 0);
+    },
+
     addItem: (product) => set((state) => {
-        const existingIndex = state.items.findIndex(i => i.productId === product.productId);
+        const key = cartItemKey(product);
+        const existingIndex = state.items.findIndex(i => cartItemKey(i) === key);
 
         if (existingIndex >= 0) {
             const newItems = [...state.items];
-            newItems[existingIndex].quantity += 1;
+            newItems[existingIndex] = { ...newItems[existingIndex], quantity: newItems[existingIndex].quantity + 1 };
             return { items: newItems };
         }
 
         return { items: [...state.items, { ...product, quantity: 1 }] };
     }),
 
-    removeItem: (productId) => set((state) => ({
-        items: state.items.filter(i => i.productId !== productId),
-    })),
+    removeItem: (productId, variantId) => set((state) => {
+        const key = cartItemKey({ productId, variantId });
+        return { items: state.items.filter(i => cartItemKey(i) !== key) };
+    }),
 
-    updateQuantity: (productId, quantity) => set((state) => {
+    updateQuantity: (productId, quantity, variantId) => set((state) => {
+        const key = cartItemKey({ productId, variantId });
         if (quantity <= 0) {
-            return { items: state.items.filter(i => i.productId !== productId) };
+            return { items: state.items.filter(i => cartItemKey(i) !== key) };
         }
 
         return {
             items: state.items.map(i =>
-                i.productId === productId ? { ...i, quantity } : i
+                cartItemKey(i) === key ? { ...i, quantity } : i
             ),
         };
     }),

@@ -1,12 +1,13 @@
 import { CategoryTabs } from '@/components/pos/category-tabs';
 import { ProductCard } from '@/components/pos/product-card';
 import { Sidebar } from '@/components/pos/sidebar';
+import { VariantPickerModal } from '@/components/pos/variant-picker-modal';
 import { Button } from '@/components/ui/button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Input } from '@/components/ui/input';
 import { Screen } from '@/components/ui/screen';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
-import { Category, Product, useCategories, useProducts } from '@/hooks/use-products';
+import { Category, Product, ProductVariant, useCategories, useProducts } from '@/hooks/use-products';
 import { getCurrencySymbol } from '@/lib/currency';
 import { hapticLight } from '@/lib/haptics';
 import { useAuthStore, useCartStore } from '@/store';
@@ -21,6 +22,7 @@ export default function POSScreen() {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [refreshing, setRefreshing] = useState(false);
+    const [variantProduct, setVariantProduct] = useState<Product | null>(null);
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 340;
 
@@ -65,9 +67,15 @@ export default function POSScreen() {
     const gridKey = `grid-${numColumns}-${isLargeScreen ? 'sidebar' : 'full'}`;
 
     const handleAddToCart = (product: Product) => {
+        // If product has variants, open the variant picker instead
+        if (product.variants && product.variants.length > 0) {
+            setVariantProduct(product);
+            return;
+        }
+
         // Check stock limit
         if (product.stock_quantity != null) {
-            const currentInCart = cart.items.find(i => i.productId === product.id)?.quantity || 0;
+            const currentInCart = cart.getProductTotalQuantity(product.id);
             if (currentInCart >= product.stock_quantity) {
                 Alert.alert('Stock Limit', `Only ${product.stock_quantity} available in stock.`);
                 return;
@@ -80,6 +88,29 @@ export default function POSScreen() {
             name: product.name,
             price: product.price,
             taxRate: product.tax_rate,
+        });
+    };
+
+    const handleVariantSelect = (variant: ProductVariant) => {
+        if (!variantProduct) return;
+
+        // Check stock limit using parent product's stock
+        if (variantProduct.stock_quantity != null) {
+            const currentInCart = cart.getProductTotalQuantity(variantProduct.id);
+            if (currentInCart >= variantProduct.stock_quantity) {
+                Alert.alert('Stock Limit', `Only ${variantProduct.stock_quantity} available in stock.`);
+                return;
+            }
+        }
+
+        hapticLight();
+        cart.addItem({
+            productId: variantProduct.id,
+            name: variantProduct.name,
+            price: variant.price,
+            taxRate: variantProduct.tax_rate,
+            variantId: variant.id,
+            variantName: variant.name,
         });
     };
 
@@ -200,11 +231,11 @@ export default function POSScreen() {
                             </View>
                         }
                         renderItem={({ item }) => {
-                            const cartItem = cart.items.find((i) => i.productId === item.id);
+                            const totalQty = cart.getProductTotalQuantity(item.id);
                             return (
                                 <ProductCard
                                     item={item}
-                                    quantityInCart={cartItem?.quantity}
+                                    quantityInCart={totalQty}
                                     onAddToCart={handleAddToCart}
                                     currencySymbol={getCurrencySymbol(tenant?.currency)}
                                 />
@@ -239,6 +270,18 @@ export default function POSScreen() {
                         </View>
                     </TouchableOpacity>
                 </View>
+            )}
+
+            {/* Variant Picker Modal */}
+            {variantProduct && (
+                <VariantPickerModal
+                    visible={!!variantProduct}
+                    productName={variantProduct.name}
+                    variants={variantProduct.variants || []}
+                    currencySymbol={getCurrencySymbol(tenant?.currency)}
+                    onSelect={handleVariantSelect}
+                    onClose={() => setVariantProduct(null)}
+                />
             )}
         </Screen>
     );

@@ -69,7 +69,8 @@ export default function OrderDetailsScreen() {
 
             // Items
             order.order_items?.forEach((item) => {
-                builder.textLine(`${item.quantity}x ${item.product_name}`);
+                const displayName = item.variant_name ? `${item.product_name} (${item.variant_name})` : item.product_name;
+                builder.textLine(`${item.quantity}x ${displayName}`);
                 builder.align('right').textLine(`${(item.price * item.quantity).toFixed(2)}`).align('left');
             });
 
@@ -179,6 +180,11 @@ export default function OrderDetailsScreen() {
                                     <Text className="text-text-primary font-medium">
                                         {item.quantity}x {item.product_name}
                                     </Text>
+                                    {item.variant_name && (
+                                        <Text className="text-text-muted text-xs">
+                                            {item.variant_name}
+                                        </Text>
+                                    )}
                                 </View>
                                 <Text className="text-text-primary font-medium">
                                     {getCurrencySymbol()}{(item.price * item.quantity).toFixed(2)}
