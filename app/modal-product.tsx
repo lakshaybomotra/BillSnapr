@@ -3,15 +3,18 @@ import { useImageUpload } from '@/hooks/use-image-upload';
 import { useCategories, useCreateProduct, useCreateVariant, useDeleteProduct, useDeleteVariant, useProducts, useUpdateProduct } from '@/hooks/use-products';
 import { useGate } from '@/hooks/use-subscription';
 import { hapticLight, hapticMedium } from '@/lib/haptics';
+import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 export default function ProductModal() {
     const params = useLocalSearchParams<{ id?: string }>();
     const isEditing = !!params.id;
 
+    const queryClient = useQueryClient();
     const { data: products } = useProducts();
     const { data: categories } = useCategories();
     const createProduct = useCreateProduct();
@@ -33,6 +36,18 @@ export default function ProductModal() {
     const [stockQuantity, setStockQuantity] = useState(productToEdit?.stock_quantity?.toString() || '');
     const [newVariantName, setNewVariantName] = useState('');
     const [newVariantPrice, setNewVariantPrice] = useState('');
+
+    // Sync form state when productToEdit becomes available after query refetch
+    useEffect(() => {
+        if (productToEdit && isEditing) {
+            setName(prev => prev || productToEdit.name || '');
+            setPrice(prev => prev || productToEdit.price?.toString() || '');
+            setImageUrl(prev => prev || productToEdit.image_url || '');
+            setCategoryId(prev => prev || productToEdit.category_id || '');
+            setTrackStock(productToEdit.stock_quantity != null);
+            setStockQuantity(prev => prev || productToEdit.stock_quantity?.toString() || '');
+        }
+    }, [productToEdit, isEditing]);
 
     const isLoading = createProduct.isPending || updateProduct.isPending || deleteProduct.isPending || isImageUploading || createVariant.isPending || deleteVariant.isPending;
 
@@ -80,7 +95,9 @@ export default function ProductModal() {
             createProduct.mutate(
                 productData,
                 {
-                    onSuccess: (newProduct) => {
+                    onSuccess: async (newProduct) => {
+                        // Wait for products cache to update before navigating
+                        await queryClient.invalidateQueries({ queryKey: ['products'] });
                         // Redirect to edit mode so user can add variants immediately
                         router.replace({
                             pathname: '/modal-product',
@@ -126,7 +143,7 @@ export default function ProductModal() {
                 ) : undefined
             }} />
 
-            <ScrollView className="flex-1 p-6" contentContainerStyle={{ gap: 24, paddingBottom: 40 }}>
+            <KeyboardAwareScrollView className="flex-1 p-6" contentContainerStyle={{ gap: 24, paddingBottom: 40 }} enableOnAndroid extraScrollHeight={230}>
                 <View>
                     <Text className="text-text-secondary text-sm mb-2">Product Name</Text>
                     <TextInput
@@ -326,7 +343,7 @@ export default function ProductModal() {
                         </Text>
                     )}
                 </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollView>
         </View>
     );
 }

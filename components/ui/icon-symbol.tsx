@@ -58,6 +58,9 @@ const MAPPING = {
     'shippingbox': 'inventory-2',
     'fork.knife': 'restaurant',
     'line.3.horizontal.decrease': 'filter-list',
+    'questionmark.circle': 'help-outline',
+    'checkmark': 'check',
+    'arrow.up.arrow.down': 'swap-vert',
 } as IconMapping;
 
 /**

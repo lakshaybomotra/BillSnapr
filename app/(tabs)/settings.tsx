@@ -2,9 +2,11 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSignOut } from '@/hooks/use-auth';
 import { useRole } from '@/hooks/use-role';
 import { useAuthStore } from '@/store';
+import { useSettingsStore } from '@/store/settings';
 import { useSubscriptionStore } from '@/store/subscription';
 import { useRouter } from 'expo-router';
-import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SettingsScreen() {
@@ -13,6 +15,17 @@ export default function SettingsScreen() {
     const signOut = useSignOut();
     const isPro = useSubscriptionStore((s) => s.isProUser);
     const { canManageSettings } = useRole();
+    const { defaultPaymentMethod, setDefaultPaymentMethod } = useSettingsStore();
+    const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+
+    const paymentOptions = [
+        { id: null, label: 'Always Ask User', icon: 'questionmark.circle' as const },
+        { id: 'cash' as const, label: 'Cash', icon: 'banknote' as const },
+        { id: 'card' as const, label: 'Card', icon: 'creditcard' as const },
+        { id: 'other' as const, label: 'Other (UPI)', icon: 'qrcode' as const },
+    ];
+
+    const currentPaymentLabel = paymentOptions.find(o => o.id === defaultPaymentMethod)?.label || 'Always Ask';
 
     const handleSignOut = () => {
         Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -134,6 +147,22 @@ export default function SettingsScreen() {
                                     </View>
                                     <IconSymbol name="chevron.right" size={16} color="#94A3B8" />
                                 </TouchableOpacity>
+
+                                <TouchableOpacity onPress={() => setPaymentModalVisible(true)} className="flex-row items-center justify-between p-4">
+                                    <View className="flex-row items-center gap-4">
+                                        <View className="w-8 h-8 rounded-full bg-green-50 items-center justify-center">
+                                            <IconSymbol name="banknote" size={16} color="#22c55e" />
+                                        </View>
+                                        <View>
+                                            <Text className="text-text-primary font-semibold text-base">Default Payment</Text>
+                                            <Text className="text-text-muted text-xs mt-0.5">Auto-select at checkout</Text>
+                                        </View>
+                                    </View>
+                                    <View className="flex-row items-center gap-2">
+                                        <Text className="text-text-muted text-xs font-medium bg-gray-100 px-2 py-1 rounded">{currentPaymentLabel}</Text>
+                                        <IconSymbol name="chevron.right" size={16} color="#94A3B8" />
+                                    </View>
+                                </TouchableOpacity>
                             </View>
                         </View>
                     )}
@@ -162,6 +191,7 @@ export default function SettingsScreen() {
                         </View>
                     </View>
 
+
                     <View>
                         <Text className="text-text-muted text-xs uppercase font-bold tracking-widest mb-3 ml-2">Account</Text>
                         <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
@@ -185,6 +215,68 @@ export default function SettingsScreen() {
                     <Text className="text-text-muted text-xxs mt-1 opacity-60">Version 1.0.1 • Build 2026.2</Text>
                 </View>
             </ScrollView>
+
+            {/* Payment Method Modal */}
+            <Modal
+                visible={paymentModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setPaymentModalVisible(false)}
+            >
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => setPaymentModalVisible(false)}
+                    className="flex-1 bg-black/40 justify-end"
+                >
+                    <TouchableOpacity activeOpacity={1} onPress={() => { }} className="bg-white rounded-t-3xl">
+                        <View className="flex-row items-center justify-between px-5 pt-5 pb-3">
+                            <View>
+                                <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mb-1">Default Payment</Text>
+                                <Text className="text-text-primary text-lg font-bold">Select Payment Method</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setPaymentModalVisible(false)}
+                                className="w-8 h-8 bg-gray-100 rounded-full items-center justify-center"
+                            >
+                                <IconSymbol name="xmark" size={14} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+                        <View className="px-5 pb-8 gap-2.5">
+                            {paymentOptions.map((option) => {
+                                const isActive = defaultPaymentMethod === option.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={option.label}
+                                        onPress={() => {
+                                            setDefaultPaymentMethod(option.id);
+                                            setPaymentModalVisible(false);
+                                        }}
+                                        activeOpacity={0.7}
+                                        className={`flex-row items-center justify-between rounded-xl px-4 py-3.5 border ${isActive
+                                            ? 'border-primary-500 bg-primary-50'
+                                            : 'border-gray-100 bg-gray-50'
+                                            }`}
+                                    >
+                                        <View className="flex-row items-center gap-3">
+                                            <View className={`w-8 h-8 rounded-lg items-center justify-center ${isActive ? 'bg-primary-100' : 'bg-white'}`}>
+                                                <IconSymbol name={option.icon} size={16} color={isActive ? '#00936E' : '#64748B'} />
+                                            </View>
+                                            <Text className={`font-semibold text-base ${isActive ? 'text-primary-700' : 'text-text-primary'}`}>
+                                                {option.label}
+                                            </Text>
+                                        </View>
+                                        {isActive && (
+                                            <View className="w-6 h-6 bg-primary-500 rounded-full items-center justify-center">
+                                                <IconSymbol name="checkmark" size={14} color="white" />
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 }

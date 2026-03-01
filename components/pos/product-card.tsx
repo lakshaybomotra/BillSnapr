@@ -8,10 +8,11 @@ interface ProductCardProps {
     item: Product;
     quantityInCart?: number;
     onAddToCart: (product: Product) => void;
+    onLongPress?: (product: Product) => void;
     currencySymbol: string;
 }
 
-export function ProductCard({ item, quantityInCart, onAddToCart, currencySymbol }: ProductCardProps) {
+export function ProductCard({ item, quantityInCart, onAddToCart, onLongPress, currencySymbol }: ProductCardProps) {
     const isTracked = item.stock_quantity != null;
     const isOutOfStock = isTracked && item.stock_quantity === 0;
     const isLowStock = isTracked && item.stock_quantity! > 0 && item.stock_quantity! <= 5;
@@ -19,6 +20,8 @@ export function ProductCard({ item, quantityInCart, onAddToCart, currencySymbol 
     return (
         <TouchableOpacity
             onPress={() => !isOutOfStock && onAddToCart(item)}
+            onLongPress={() => !isOutOfStock && onLongPress?.(item)}
+            delayLongPress={400}
             activeOpacity={isOutOfStock ? 1 : 0.7}
             className="flex-1 bg-white rounded-2xl overflow-hidden border border-gray-100"
             style={{

@@ -1,11 +1,12 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useCategories, useProducts } from '@/hooks/use-products';
+import { useCategories, useProducts, useReorderCategories } from '@/hooks/use-products';
 import { useRole } from '@/hooks/use-role';
 import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore } from '@/store';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { FlatList, Modal, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProductsScreen() {
@@ -14,6 +15,33 @@ export default function ProductsScreen() {
     const { data: categories } = useCategories();
     const tenant = useAuthStore((s) => s.tenant);
     const { canManageProducts } = useRole();
+    const reorderCategories = useReorderCategories();
+    const [reorderModalVisible, setReorderModalVisible] = useState(false);
+    const [reorderedCategories, setReorderedCategories] = useState<typeof categories>([]);
+
+    const openReorderModal = useCallback(() => {
+        if (categories) {
+            setReorderedCategories([...categories]);
+            setReorderModalVisible(true);
+        }
+    }, [categories]);
+
+    const moveCategory = useCallback((index: number, direction: 'up' | 'down') => {
+        setReorderedCategories((prev) => {
+            if (!prev) return prev;
+            const newList = [...prev];
+            const targetIndex = direction === 'up' ? index - 1 : index + 1;
+            if (targetIndex < 0 || targetIndex >= newList.length) return prev;
+            [newList[index], newList[targetIndex]] = [newList[targetIndex], newList[index]];
+            return newList;
+        });
+    }, []);
+
+    const saveReorder = useCallback(async () => {
+        if (!reorderedCategories?.length) return;
+        await reorderCategories.mutateAsync(reorderedCategories.map(c => c.id));
+        setReorderModalVisible(false);
+    }, [reorderedCategories, reorderCategories]);
 
 
 
@@ -52,14 +80,26 @@ export default function ProductsScreen() {
                         </TouchableOpacity>
                     ))}
                     {canManageProducts && (
-                        <TouchableOpacity
-                            onPress={() => router.push('/modal-category')}
-                            activeOpacity={0.7}
-                            className="flex-row items-center bg-primary-50 dark:bg-primary-900/30 px-3 py-2 rounded-full border border-primary-200 dark:border-primary-700 gap-1.5"
-                        >
-                            <IconSymbol name="plus" size={14} color="#00936E" />
-                            <Text className="text-primary-600 dark:text-primary-400 font-semibold text-sm">New</Text>
-                        </TouchableOpacity>
+                        <>
+                            <TouchableOpacity
+                                onPress={() => router.push('/modal-category')}
+                                activeOpacity={0.7}
+                                className="flex-row items-center bg-primary-50 dark:bg-primary-900/30 px-3 py-2 rounded-full border border-primary-200 dark:border-primary-700 gap-1.5"
+                            >
+                                <IconSymbol name="plus" size={14} color="#00936E" />
+                                <Text className="text-primary-600 dark:text-primary-400 font-semibold text-sm">New</Text>
+                            </TouchableOpacity>
+                            {categories && categories.length > 1 && (
+                                <TouchableOpacity
+                                    onPress={openReorderModal}
+                                    activeOpacity={0.7}
+                                    className="flex-row items-center bg-blue-50 px-3 py-2 rounded-full border border-blue-200 gap-1.5"
+                                >
+                                    <IconSymbol name="arrow.up.arrow.down" size={14} color="#3b82f6" />
+                                    <Text className="text-blue-600 font-semibold text-sm">Reorder</Text>
+                                </TouchableOpacity>
+                            )}
+                        </>
                     )}
                 </ScrollView>
             </View>
@@ -141,17 +181,97 @@ export default function ProductsScreen() {
             />
 
             {/* Floating Action Button — only for managers and admins */}
-            {canManageProducts && (
-                <View className="absolute bottom-6 right-5">
-                    <TouchableOpacity
-                        onPress={() => router.push('/modal-product')}
-                        className="w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-xl border border-white/20"
-                        activeOpacity={0.9}
-                    >
-                        <IconSymbol name="plus" size={28} color="white" />
+            {
+                canManageProducts && (
+                    <View className="absolute bottom-6 right-5">
+                        <TouchableOpacity
+                            onPress={() => router.push('/modal-product')}
+                            className="w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-xl border border-white/20"
+                            activeOpacity={0.9}
+                        >
+                            <IconSymbol name="plus" size={28} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                )
+            }
+
+            {/* Reorder Categories Modal */}
+            <Modal
+                visible={reorderModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setReorderModalVisible(false)}
+            >
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => setReorderModalVisible(false)}
+                    className="flex-1 bg-black/40 justify-end"
+                >
+                    <TouchableOpacity activeOpacity={1} onPress={() => { }} className="bg-white rounded-t-3xl max-h-[70%]">
+                        {/* Header */}
+                        <View className="flex-row items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+                            <View>
+                                <Text className="text-text-muted text-xs font-bold uppercase tracking-widest mb-1">Categories</Text>
+                                <Text className="text-text-primary text-lg font-bold">Reorder Categories</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setReorderModalVisible(false)}
+                                className="w-8 h-8 bg-gray-100 rounded-full items-center justify-center"
+                            >
+                                <IconSymbol name="xmark" size={14} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Category List */}
+                        <ScrollView className="px-5 py-3" contentContainerStyle={{ gap: 8 }}>
+                            {reorderedCategories?.map((cat, index) => (
+                                <View key={cat.id} className="flex-row items-center bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                                    <Text className="text-text-muted text-sm font-bold w-7">{index + 1}</Text>
+                                    {cat.image_url ? (
+                                        <View className="w-8 h-8 rounded-lg overflow-hidden mr-3">
+                                            <Image source={{ uri: cat.image_url }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                                        </View>
+                                    ) : (
+                                        <View className="w-8 h-8 rounded-lg bg-primary-100 items-center justify-center mr-3">
+                                            <Text className="text-primary-700 text-sm font-bold">{cat.name.charAt(0)}</Text>
+                                        </View>
+                                    )}
+                                    <Text className="flex-1 text-text-primary font-semibold text-base">{cat.name}</Text>
+                                    <View className="flex-row gap-1">
+                                        <TouchableOpacity
+                                            onPress={() => moveCategory(index, 'up')}
+                                            disabled={index === 0}
+                                            className={`w-9 h-9 rounded-lg items-center justify-center ${index === 0 ? 'bg-gray-100' : 'bg-blue-50 border border-blue-200'}`}
+                                        >
+                                            <Text className={`text-lg ${index === 0 ? 'text-gray-300' : 'text-blue-600'}`}>↑</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => moveCategory(index, 'down')}
+                                            disabled={index === (reorderedCategories?.length ?? 0) - 1}
+                                            className={`w-9 h-9 rounded-lg items-center justify-center ${index === (reorderedCategories?.length ?? 0) - 1 ? 'bg-gray-100' : 'bg-blue-50 border border-blue-200'}`}
+                                        >
+                                            <Text className={`text-lg ${index === (reorderedCategories?.length ?? 0) - 1 ? 'text-gray-300' : 'text-blue-600'}`}>↓</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+
+                        {/* Save Button */}
+                        <View className="px-5 pb-8 pt-3">
+                            <TouchableOpacity
+                                onPress={saveReorder}
+                                disabled={reorderCategories.isPending}
+                                className={`py-4 rounded-xl items-center ${reorderCategories.isPending ? 'bg-primary-300' : 'bg-primary-500'}`}
+                            >
+                                <Text className="text-white font-bold text-base">
+                                    {reorderCategories.isPending ? 'Saving...' : 'Save Order'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </TouchableOpacity>
-                </View>
-            )}
-        </SafeAreaView>
+                </TouchableOpacity>
+            </Modal>
+        </SafeAreaView >
     );
 }

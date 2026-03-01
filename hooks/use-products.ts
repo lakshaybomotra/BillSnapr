@@ -82,6 +82,33 @@ export function useCategories() {
     });
 }
 
+// Reorder categories
+export function useReorderCategories() {
+    const queryClient = useQueryClient();
+    const tenant = useAuthStore((s) => s.tenant);
+
+    return useMutation({
+        mutationFn: async (orderedIds: string[]) => {
+            if (!tenant) throw new Error('No tenant');
+
+            const updates = orderedIds.map((id, index) =>
+                supabase
+                    .from('categories')
+                    .update({ sort_order: index })
+                    .eq('id', id)
+                    .eq('tenant_id', tenant.id)
+            );
+
+            const results = await Promise.all(updates);
+            const error = results.find(r => r.error)?.error;
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['categories', tenant?.id] });
+        },
+    });
+}
+
 // Create product
 export function useCreateProduct() {
     const queryClient = useQueryClient();

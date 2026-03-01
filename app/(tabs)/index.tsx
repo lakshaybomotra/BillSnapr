@@ -1,5 +1,6 @@
 import { CategoryTabs } from '@/components/pos/category-tabs';
 import { ProductCard } from '@/components/pos/product-card';
+import { QuantityInputModal } from '@/components/pos/quantity-input-modal';
 import { Sidebar } from '@/components/pos/sidebar';
 import { VariantPickerModal } from '@/components/pos/variant-picker-modal';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ export default function POSScreen() {
     const [search, setSearch] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [variantProduct, setVariantProduct] = useState<Product | null>(null);
+    const [quantityProduct, setQuantityProduct] = useState<Product | null>(null);
     const { width } = useWindowDimensions();
     const isLargeScreen = width >= 340;
 
@@ -119,6 +121,28 @@ export default function POSScreen() {
             pathname: '/modal-category',
             params: { id: category.id, name: category.name, image_url: category.image_url || '' },
         });
+    };
+
+    const handleLongPress = (product: Product) => {
+        // For products with variants, open variant picker (same as tap)
+        if (product.variants && product.variants.length > 0) {
+            setVariantProduct(product);
+            return;
+        }
+        hapticLight();
+        setQuantityProduct(product);
+    };
+
+    const handleBulkAdd = (qty: number) => {
+        if (!quantityProduct) return;
+        for (let i = 0; i < qty; i++) {
+            cart.addItem({
+                productId: quantityProduct.id,
+                name: quantityProduct.name,
+                price: quantityProduct.price,
+                taxRate: quantityProduct.tax_rate,
+            });
+        }
     };
 
 
@@ -237,6 +261,7 @@ export default function POSScreen() {
                                     item={item}
                                     quantityInCart={totalQty}
                                     onAddToCart={handleAddToCart}
+                                    onLongPress={handleLongPress}
                                     currencySymbol={getCurrencySymbol(tenant?.currency)}
                                 />
                             );
@@ -281,6 +306,20 @@ export default function POSScreen() {
                     currencySymbol={getCurrencySymbol(tenant?.currency)}
                     onSelect={handleVariantSelect}
                     onClose={() => setVariantProduct(null)}
+                />
+            )}
+
+            {/* Quantity Input Modal (Long Press) */}
+            {quantityProduct && (
+                <QuantityInputModal
+                    visible={!!quantityProduct}
+                    productName={quantityProduct.name}
+                    price={quantityProduct.price}
+                    currencySymbol={getCurrencySymbol(tenant?.currency)}
+                    stockLimit={quantityProduct.stock_quantity}
+                    currentInCart={cart.getProductTotalQuantity(quantityProduct.id)}
+                    onSubmit={handleBulkAdd}
+                    onClose={() => setQuantityProduct(null)}
                 />
             )}
         </Screen>

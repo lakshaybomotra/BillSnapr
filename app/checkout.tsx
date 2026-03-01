@@ -4,15 +4,16 @@ import { useNetworkStatus } from '@/hooks/use-network';
 import { useCreateOrder, useOrders } from '@/hooks/use-orders';
 import { useGate, useSubscription } from '@/hooks/use-subscription';
 import { getCurrencySymbol } from '@/lib/currency';
-import { hapticError, hapticSuccess } from '@/lib/haptics';
+import { hapticError, hapticLight, hapticSuccess } from '@/lib/haptics';
 import { enqueueOrder } from '@/lib/offline-queue';
 import { EscPosBuilder } from '@/lib/printer/esc-pos';
 import { useAuthStore, useCartStore } from '@/store';
 import { usePrinterStore } from '@/store/printer';
+import { useSettingsStore } from '@/store/settings';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function CheckoutScreen() {
     const cart = useCartStore();
@@ -28,6 +29,14 @@ export default function CheckoutScreen() {
             router.back();
         }
     }, [cart.items.length]);
+
+    // Pre-select default payment method from settings
+    const defaultPaymentMethod = useSettingsStore((s) => s.defaultPaymentMethod);
+    useEffect(() => {
+        if (defaultPaymentMethod && !cart.paymentMethod) {
+            cart.setPaymentMethod(defaultPaymentMethod);
+        }
+    }, []);
 
     // Check monthly order limit
     const now = new Date();
@@ -54,6 +63,26 @@ export default function CheckoutScreen() {
 
     const [autoPrint, setAutoPrint] = useState(true);
     const [customerName, setCustomerName] = useState('');
+    const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
+    const [editingQty, setEditingQty] = useState('');
+
+    // Exit editing mode when keyboard is dismissed (e.g. Android nav button)
+    useEffect(() => {
+        const sub = Keyboard.addListener('keyboardDidHide', () => {
+            if (editingItemKey) {
+                // Find the item being edited and commit the change
+                const item = cart.items.find(
+                    i => `${i.productId}::${i.variantId || ''}` === editingItemKey
+                );
+                if (item) {
+                    const newQty = parseInt(editingQty, 10) || 0;
+                    cart.updateQuantity(item.productId, newQty, item.variantId);
+                }
+                setEditingItemKey(null);
+            }
+        });
+        return () => sub.remove();
+    }, [editingItemKey, editingQty]);
 
     const handleCheckout = () => {
         if (!cart.paymentMethod) {
@@ -263,7 +292,29 @@ export default function CheckoutScreen() {
             {/* Custom Header */}
             <View className="flex-row items-center justify-between pb-4 border-b border-gray-100 px-4 pt-2">
                 <Text className="text-xl font-bold text-text-primary">Checkout</Text>
-                <View className="flex-row gap-4">
+                <View className="flex-row gap-4 items-center">
+                    {/* Clear Cart Button */}
+                    <TouchableOpacity
+                        onPress={() => {
+                            Alert.alert(
+                                'Clear Cart',
+                                'Remove all items from the cart?',
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                        text: 'Clear All',
+                                        style: 'destructive',
+                                        onPress: () => {
+                                            hapticLight();
+                                            cart.clearCart();
+                                        }
+                                    }
+                                ]
+                            );
+                        }}
+                    >
+                        <Text className="text-red-500 text-sm font-semibold">Clear All</Text>
+                    </TouchableOpacity>
                     {/* Print Bill Button */}
                     <TouchableOpacity onPress={printBill} disabled={!connectedDevice} className={!connectedDevice ? 'opacity-50' : ''}>
                         <IconSymbol name="doc.text" size={24} color="#0F172A" />
@@ -309,7 +360,7 @@ export default function CheckoutScreen() {
                 </View>
             </LinearGradient>
 
-            <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}>
+            <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 56 }}>
                 {/* Cart Items */}
                 <View className="gap-3 mb-6">
                     {cart.items.map((item) => (
@@ -329,19 +380,60 @@ export default function CheckoutScreen() {
                                 )}
                             </View>
 
-                            <View className="flex-row items-center bg-gray-50 rounded-lg border border-gray-200">
+                            <View className="flex-row items-center gap-2">
+                                <View className="flex-row items-center bg-gray-50 rounded-lg border border-gray-200">
+                                    <TouchableOpacity
+                                        onPress={() => cart.updateQuantity(item.productId, item.quantity - 1, item.variantId)}
+                                        className="p-2 w-8 items-center"
+                                    >
+                                        <Text className="text-lg font-bold text-gray-400">-</Text>
+                                    </TouchableOpacity>
+                                    {editingItemKey === `${item.productId}::${item.variantId || ''}` ? (
+                                        <TextInput
+                                            value={editingQty}
+                                            onChangeText={(t) => setEditingQty(t.replace(/[^0-9]/g, ''))}
+                                            keyboardType="number-pad"
+                                            autoFocus
+                                            selectTextOnFocus
+                                            className="w-10 text-center font-semibold text-text-primary text-base py-0"
+                                            onBlur={() => {
+                                                const newQty = parseInt(editingQty, 10) || 0;
+                                                cart.updateQuantity(item.productId, newQty, item.variantId);
+                                                setEditingItemKey(null);
+                                            }}
+                                            onSubmitEditing={() => {
+                                                const newQty = parseInt(editingQty, 10) || 0;
+                                                cart.updateQuantity(item.productId, newQty, item.variantId);
+                                                setEditingItemKey(null);
+                                                Keyboard.dismiss();
+                                            }}
+                                            returnKeyType="done"
+                                        />
+                                    ) : (
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setEditingItemKey(`${item.productId}::${item.variantId || ''}`);
+                                                setEditingQty(String(item.quantity));
+                                            }}
+                                        >
+                                            <Text className="w-8 text-center font-semibold text-text-primary">{item.quantity}</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    <TouchableOpacity
+                                        onPress={() => cart.updateQuantity(item.productId, item.quantity + 1, item.variantId)}
+                                        className="p-2 w-8 items-center"
+                                    >
+                                        <Text className="text-lg font-bold text-primary-500">+</Text>
+                                    </TouchableOpacity>
+                                </View>
                                 <TouchableOpacity
-                                    onPress={() => cart.updateQuantity(item.productId, item.quantity - 1, item.variantId)}
-                                    className="p-2 w-8 items-center"
+                                    onPress={() => {
+                                        hapticLight();
+                                        cart.removeItem(item.productId, item.variantId);
+                                    }}
+                                    className="p-2"
                                 >
-                                    <Text className="text-lg font-bold text-gray-400">-</Text>
-                                </TouchableOpacity>
-                                <Text className="w-6 text-center font-semibold text-text-primary">{item.quantity}</Text>
-                                <TouchableOpacity
-                                    onPress={() => cart.updateQuantity(item.productId, item.quantity + 1, item.variantId)}
-                                    className="p-2 w-8 items-center"
-                                >
-                                    <Text className="text-lg font-bold text-primary-500">+</Text>
+                                    <IconSymbol name="trash" size={16} color="#EF4444" />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -370,7 +462,6 @@ export default function CheckoutScreen() {
                 </View>
 
                 {/* Payment Methods */}
-                {/* ... (keep existing payment methods) ... */}
                 <View className="mb-6">
                     <Text className="text-text-muted font-bold text-xs uppercase tracking-widest mb-3 ml-1">Payment Method</Text>
                     <View className="flex-row gap-3">
@@ -460,7 +551,6 @@ export default function CheckoutScreen() {
                 </View>
 
                 {/* Bill Summary */}
-                {/* ... (keep existing bill summary) ... */}
                 <View className="p-4 bg-gray-50 rounded-xl border border-gray-200 mb-6">
                     <View className="flex-row justify-between mb-2">
                         <Text className="text-text-secondary">Subtotal</Text>
