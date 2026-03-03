@@ -1,5 +1,5 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { EscPosBuilder } from '@/lib/printer/esc-pos';
+import { buildTestPage } from '@/lib/printer/receipt-builder';
 import { usePrinterStore } from '@/store/printer';
 import { Stack } from 'expo-router';
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
@@ -19,19 +19,7 @@ export default function PrinterSettingsScreen() {
     const handleTestPrint = async () => {
         if (!connectedDevice) return;
         try {
-            const buffer = new EscPosBuilder()
-                .initialize()
-                .align('center')
-                .textLine('BillSnapr Test Print')
-                .textLine('--------------------------------')
-                .align('left')
-                .textLine('Connection Successful!')
-                .textLine('Printer is ready.')
-                .feed(2)
-                .cut()
-                .getBuffer();
-
-            await print(buffer);
+            await print(buildTestPage());
         } catch (error) {
             // Error handled in store
         }

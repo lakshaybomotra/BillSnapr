@@ -198,22 +198,24 @@ export function useVoidOrder() {
     });
 }
 
-// Get daily stats
-export function useDailyStats() {
+// Get stats for a date range
+export function useStats(dateFrom: string, dateTo?: string) {
     const tenant = useAuthStore((s) => s.tenant);
 
     return useQuery({
-        queryKey: ['daily-stats', tenant?.id],
+        queryKey: ['daily-stats', tenant?.id, dateFrom, dateTo],
         queryFn: async () => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            const { data, error } = await supabase
+            let query = supabase
                 .from('orders')
                 .select('total, payment_method')
                 .eq('status', 'completed')
-                .gte('created_at', today.toISOString());
+                .gte('created_at', dateFrom);
 
+            if (dateTo) {
+                query = query.lte('created_at', dateTo);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
 
             const stats = {
@@ -234,6 +236,14 @@ export function useDailyStats() {
             return stats;
         },
         enabled: !!tenant,
-        refetchInterval: 30000, // Refresh every 30s
+        // Only auto-refresh for open-ended ranges (Today, This Week, This Month)
+        refetchInterval: dateTo ? undefined : 30000,
     });
+}
+
+// Backward-compatible wrapper
+export function useDailyStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return useStats(today.toISOString());
 }

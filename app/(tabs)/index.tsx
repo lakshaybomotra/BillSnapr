@@ -148,9 +148,17 @@ export default function POSScreen() {
 
     const getGreeting = () => {
         const hour = new Date().getHours();
-        if (hour < 12) return 'Good morning';
-        if (hour < 18) return 'Good afternoon';
-        return 'Good evening';
+
+        if (hour >= 5 && hour < 12)
+            return "☀️ Good morning. Ready to serve.";
+
+        if (hour >= 12 && hour < 17)
+            return "🍽️ Lunch service in full swing.";
+
+        if (hour >= 17 && hour < 22)
+            return "🌆 Dinner rush time.";
+
+        return "🌙 Closing shift in progress.";
     };
 
     if (isLoading) {
@@ -272,7 +280,7 @@ export default function POSScreen() {
 
             {/* Floating Cart Button */}
             {cartItemCount > 0 && (
-                <View className={`absolute bottom-6 left-5 right-5 z-50 ${isLargeScreen ? 'left-24' : ''}`}>
+                <View className="absolute bottom-6 right-5 z-50" style={{ left: isLargeScreen ? SIDEBAR_WIDTH + 5 : 20 }}>
                     <TouchableOpacity
                         onPress={() => router.push('/checkout')}
                         activeOpacity={0.9}

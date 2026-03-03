@@ -6,7 +6,7 @@ import { useGate, useSubscription } from '@/hooks/use-subscription';
 import { getCurrencySymbol } from '@/lib/currency';
 import { hapticError, hapticLight, hapticSuccess } from '@/lib/haptics';
 import { enqueueOrder } from '@/lib/offline-queue';
-import { EscPosBuilder } from '@/lib/printer/esc-pos';
+import { buildReceipt } from '@/lib/printer/receipt-builder';
 import { useAuthStore, useCartStore } from '@/store';
 import { usePrinterStore } from '@/store/printer';
 import { useSettingsStore } from '@/store/settings';
@@ -84,7 +84,7 @@ export default function CheckoutScreen() {
         return () => sub.remove();
     }, [editingItemKey, editingQty]);
 
-    const handleCheckout = () => {
+    const handleCheckout = async () => {
         if (!cart.paymentMethod) {
             Alert.alert('Payment Method Required', 'Please select a payment method to continue.');
             return;
@@ -123,35 +123,65 @@ export default function CheckoutScreen() {
 
         if (!isOnline) {
             // Offline: save to persistent queue (survives app restart)
-            enqueueOrder(orderVars).then(() => {
-                hapticSuccess();
-                cart.clearCart();
-                Alert.alert(
-                    'Order Queued ⏳',
-                    'Your order has been saved and will sync automatically when you\'re back online.',
-                    [{ text: 'OK', onPress: () => router.back() }]
-                );
-            });
+            await enqueueOrder(orderVars);
+            hapticSuccess();
+            cart.clearCart();
+            Alert.alert(
+                'Order Queued ⏳',
+                'Your order has been saved and will sync automatically when you\'re back online.',
+                [{ text: 'OK', onPress: () => router.back() }]
+            );
             return;
         }
 
-        createOrder.mutate(orderVars, {
-            onSuccess: async (order) => {
-                // Auto-print if connected AND enabled
-                if (connectedDevice && autoPrint) {
-                    await printReceipt(order);
-                }
+        try {
+            // 1. Create order — await the API response
+            const order = await createOrder.mutateAsync(orderVars);
 
-                hapticSuccess();
-                Alert.alert('Success', 'Order placed successfully!', [
-                    { text: 'OK', onPress: () => router.back() }
-                ]);
-            },
-            onError: (error) => {
-                hapticError();
-                Alert.alert('Error', error.message);
+            // 2. Print receipt — read fresh printer state and await print
+            let printFailed = false;
+            const { connectedDevice: printer, print: doPrint } = usePrinterStore.getState();
+            if (printer && autoPrint) {
+                try {
+                    const config = {
+                        tenantName: tenant?.name || 'BillSnapr',
+                        currency: tenant?.currency || 'INR',
+                        isPro,
+                        receiptHeader: tenant?.receipt_header,
+                        receiptFooter: tenant?.receipt_footer,
+                    };
+                    const buffer = buildReceipt(config, {
+                        orderNumber: order.order_number,
+                        date: order.created_at || new Date().toISOString(),
+                        customerName: customerName.trim() || null,
+                        items: cart.items.map(i => ({
+                            name: i.name,
+                            variantName: i.variantName,
+                            price: i.price,
+                            quantity: i.quantity,
+                        })),
+                        total: order.total,
+                    });
+                    await doPrint(buffer);
+                } catch (e) {
+                    console.error('Auto-print failed:', e);
+                    printFailed = true;
+                }
             }
-        });
+
+            // 3. Show success
+            hapticSuccess();
+            Alert.alert(
+                'Success',
+                printFailed
+                    ? 'Order placed! But printing failed — you can reprint from order details.'
+                    : 'Order placed successfully!',
+                [{ text: 'OK', onPress: () => router.back() }]
+            );
+        } catch (error: any) {
+            hapticError();
+            Alert.alert('Error', error.message);
+        }
     };
 
     const printBill = async () => {
@@ -166,114 +196,22 @@ export default function CheckoutScreen() {
             return;
         }
         try {
-            // Re-use logic but for CART items (Estimate)
-            // Ideally we'd have a separate helper, but we can construct it here for now
-            const builder = new EscPosBuilder()
-                .initialize()
-                .align('center')
-                .bold(true)
-                .size(1, 1)
-                .textLine(tenant?.name || 'BillSnapr')
-                .bold(false)
-                .size(0, 0);
-
-            // Pro users get custom header
-            if (isPro && tenant?.receipt_header) {
-                builder.textLine(tenant.receipt_header);
-            }
-
-            builder
-                .textLine('*** ESTIMATE / BILL ***')
-                .textLine('--------------------------------');
-
-            if (customerName.trim()) {
-                builder.align('left').textLine(`Customer: ${customerName.trim()}`);
-                builder.textLine('--------------------------------');
-            }
-
-            builder.align('left');
-
-            cart.items.forEach(item => {
-                const displayName = item.variantName ? `${item.name} (${item.variantName})` : item.name;
-                builder.textLine(`${item.quantity}x ${displayName}`);
-                builder.align('right').textLine(`${getCurrencySymbol(tenant?.currency)}${item.price.toFixed(2)}`).align('left');
+            const config = {
+                tenantName: tenant?.name || 'BillSnapr',
+                currency: tenant?.currency || 'INR',
+                isPro,
+                receiptHeader: tenant?.receipt_header,
+                receiptFooter: tenant?.receipt_footer,
+            };
+            const buffer = buildReceipt(config, {
+                date: new Date().toISOString(),
+                customerName,
+                items: cart.items.map(i => ({ name: i.name, variantName: i.variantName, price: i.price, quantity: i.quantity })),
+                total: cart.total(),
             });
-
-            builder.textLine('--------------------------------');
-            builder.align('right');
-            builder.textLine(`Total: ${getCurrencySymbol(tenant?.currency)}${cart.total().toFixed(2)}`);
-            builder.align('center');
-
-            // Pro users get custom footer, free users get default
-            const billFooter = isPro && tenant?.receipt_footer
-                ? tenant.receipt_footer
-                : 'Valid for 24 hours';
-
-            builder.feed(2)
-                .textLine(billFooter)
-                .feed(2)
-                .cut();
-
-            await print(builder.getBuffer());
+            await print(buffer);
         } catch (e) {
             Alert.alert('Printing Failed', 'Could not print bill.');
-        }
-    };
-
-    const printReceipt = async (order: any) => {
-        try {
-            const builder = new EscPosBuilder()
-                .initialize()
-                .align('center')
-                .bold(true)
-                .size(1, 1)
-                .textLine(tenant?.name || 'BillSnapr')
-                .bold(false)
-                .size(0, 0);
-
-            // Pro users get custom header
-            if (isPro && tenant?.receipt_header) {
-                builder.textLine(tenant.receipt_header);
-            }
-
-            builder
-                .textLine('--------------------------------');
-
-            if (customerName.trim()) {
-                builder.align('left').textLine(`Customer: ${customerName.trim()}`);
-                builder.textLine('--------------------------------');
-            }
-
-            builder.align('left');
-
-            // Items
-            cart.items.forEach(item => {
-                const displayName = item.variantName ? `${item.name} (${item.variantName})` : item.name;
-                builder.textLine(`${item.quantity}x ${displayName}`);
-                builder.align('right').textLine(`${getCurrencySymbol(tenant?.currency)}${item.price.toFixed(2)}`).align('left');
-            });
-
-            builder.textLine('--------------------------------');
-
-            // Totals
-            builder.align('right');
-            builder.textLine(`Total: ${getCurrencySymbol(tenant?.currency)}${cart.total().toFixed(2)}`);
-            builder.align('center');
-
-            // Pro users get custom footer, free users get default
-            const receiptFooter = isPro && tenant?.receipt_footer
-                ? tenant.receipt_footer
-                : 'Thank you for your business!';
-
-            builder.feed(2)
-                .textLine(receiptFooter)
-                .feed(2)
-                .cut();
-
-            await print(builder.getBuffer());
-        } catch (e) {
-            console.error('Printing failed', e);
-            Alert.alert('Printing Failed', 'Could not print receipt, but order was saved.');
         }
     };
 

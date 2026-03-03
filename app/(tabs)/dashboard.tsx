@@ -1,25 +1,93 @@
 import { PendingOrdersBadge } from '@/components/pending-orders';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { DashboardSkeleton } from '@/components/ui/skeleton';
-import { useDailyStats } from '@/hooks/use-orders';
+import { useStats } from '@/hooks/use-orders';
 import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore } from '@/store';
-import { format } from 'date-fns';
+import { format, startOfWeek } from 'date-fns';
 import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
     const router = useRouter();
     const tenant = useAuthStore((s) => s.tenant);
-    const { data: stats, isLoading, refetch, isRefetching } = useDailyStats();
     const cs = getCurrencySymbol(tenant?.currency);
+    const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'yesterday' | 'week' | 'month'>('today');
+
+    const { dateFrom, dateTo } = useMemo(() => {
+        const now = new Date();
+        switch (selectedPeriod) {
+            case 'today': {
+                const d = new Date(now);
+                d.setHours(0, 0, 0, 0);
+                return { dateFrom: d.toISOString(), dateTo: undefined };
+            }
+            case 'yesterday': {
+                const d = new Date(now);
+                d.setDate(d.getDate() - 1);
+                d.setHours(0, 0, 0, 0);
+                const end = new Date(d);
+                end.setHours(23, 59, 59, 999);
+                return { dateFrom: d.toISOString(), dateTo: end.toISOString() };
+            }
+            case 'week': {
+                const d = startOfWeek(now, { weekStartsOn: 1 });
+                return { dateFrom: d.toISOString(), dateTo: undefined };
+            }
+            case 'month': {
+                const d = new Date(now.getFullYear(), now.getMonth(), 1);
+                return { dateFrom: d.toISOString(), dateTo: undefined };
+            }
+        }
+    }, [selectedPeriod]);
+
+    const { data: stats, isLoading, refetch, isRefetching } = useStats(dateFrom, dateTo);
+
+    const periodLabel = useMemo(() => {
+        const now = new Date();
+        switch (selectedPeriod) {
+            case 'today': return format(now, 'EEEE, MMMM d, yyyy');
+            case 'yesterday': {
+                const d = new Date(now);
+                d.setDate(d.getDate() - 1);
+                return format(d, 'EEEE, MMMM d, yyyy');
+            }
+            case 'week': {
+                const start = startOfWeek(now, { weekStartsOn: 1 });
+                return `${format(start, 'MMM d')} – ${format(now, 'MMM d, yyyy')}`;
+            }
+            case 'month': return format(now, 'MMMM yyyy');
+        }
+    }, [selectedPeriod]);
+
+    const periods = [
+        { id: 'today' as const, label: 'Today' },
+        { id: 'yesterday' as const, label: 'Yesterday' },
+        { id: 'week' as const, label: 'This Weeks' },
+        { id: 'month' as const, label: 'This Month' },
+    ];
 
     const getGreeting = () => {
         const hour = new Date().getHours();
-        if (hour < 12) return 'Good morning';
-        if (hour < 18) return 'Good afternoon';
-        return 'Good evening';
+
+        if (hour >= 5 && hour < 9)
+            return "🌅 Good morning. Prep time — let’s set up for a smooth service.";
+
+        if (hour >= 9 && hour < 12)
+            return "☀️ Good morning. Let’s make today’s service smooth and profitable.";
+
+        if (hour >= 12 && hour < 15)
+            return "🍽️ Lunch hours are on. Keep the tables turning.";
+
+        if (hour >= 15 && hour < 18)
+            return "📊 Good afternoon. A great time to review performance.";
+
+        if (hour >= 18 && hour < 22)
+            return "🌆 Dinner service is live. Let’s close strong.";
+
+        return "🌙 Good evening. Wrapping up the day?";
     };
 
     const avgOrder = stats && stats.orderCount > 0
@@ -41,8 +109,28 @@ export default function DashboardScreen() {
                 <Text className="text-text-muted text-sm font-medium">{getGreeting()}</Text>
                 <Text className="text-2xl font-bold text-text-primary">{tenant?.name || 'Dashboard'}</Text>
                 <Text className="text-text-muted text-xs mt-1">
-                    {format(new Date(), 'EEEE, MMMM d, yyyy')}
+                    {periodLabel}
                 </Text>
+            </View>
+
+            {/* Period Selector */}
+            <View className="bg-white border-b border-gray-100 py-2.5">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+                    {periods.map((period) => {
+                        const isActive = selectedPeriod === period.id;
+                        return (
+                            <TouchableOpacity
+                                key={period.id}
+                                onPress={() => setSelectedPeriod(period.id)}
+                                className={`px-4 py-2 rounded-full ${isActive ? 'bg-primary-500' : 'bg-gray-50 border border-gray-200'}`}
+                            >
+                                <Text className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-text-secondary'}`}>
+                                    {period.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
             </View>
 
             <PendingOrdersBadge />

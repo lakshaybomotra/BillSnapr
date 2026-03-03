@@ -5,8 +5,8 @@ import { getCurrencySymbol } from '@/lib/currency';
 import { useAuthStore } from '@/store';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { FlatList, Modal, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, Modal, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProductsScreen() {
@@ -18,6 +18,17 @@ export default function ProductsScreen() {
     const reorderCategories = useReorderCategories();
     const [reorderModalVisible, setReorderModalVisible] = useState(false);
     const [reorderedCategories, setReorderedCategories] = useState<typeof categories>([]);
+    const [search, setSearch] = useState('');
+
+    const filteredProducts = useMemo(() => {
+        if (!products) return [];
+        if (!search.trim()) return products;
+        const q = search.toLowerCase();
+        return products.filter(p =>
+            p.name.toLowerCase().includes(q) ||
+            p.category?.name?.toLowerCase().includes(q)
+        );
+    }, [products, search]);
 
     const openReorderModal = useCallback(() => {
         if (categories) {
@@ -47,8 +58,29 @@ export default function ProductsScreen() {
 
     return (
         <SafeAreaView className="flex-1 bg-surface dark:bg-slate-900" edges={['top']}>
-            <View className="px-5 py-4 flex-row justify-between items-center bg-white border-b border-gray-100 dark:border-slate-700 dark:border-slate-700">
-                <Text className="text-2xl font-bold text-text-primary dark:text-slate-100 dark:text-slate-100">Products</Text>
+            <View className="px-5 py-4 flex-row justify-between items-center bg-white border-b border-gray-100 dark:border-slate-700">
+                <Text className="text-2xl font-bold text-text-primary dark:text-slate-100">Products</Text>
+            </View>
+
+            {/* Search Bar */}
+            <View className="bg-white px-4 pb-3 border-b border-gray-100">
+                <View className="flex-row items-center bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200">
+                    <IconSymbol name="magnifyingglass" size={16} color="#94A3B8" />
+                    <TextInput
+                        value={search}
+                        onChangeText={setSearch}
+                        placeholder="Search products..."
+                        placeholderTextColor="#94A3B8"
+                        className="flex-1 ml-2 text-sm text-text-primary"
+                        returnKeyType="search"
+                        autoCorrect={false}
+                    />
+                    {search.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearch('')}>
+                            <IconSymbol name="xmark" size={14} color="#94A3B8" />
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {/* Category Management Row */}
@@ -105,7 +137,7 @@ export default function ProductsScreen() {
             </View>
 
             <FlatList
-                data={products}
+                data={filteredProducts}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}
                 refreshControl={
@@ -114,10 +146,14 @@ export default function ProductsScreen() {
                 ListEmptyComponent={
                     <View className="flex-1 items-center justify-center py-20">
                         <View className="w-16 h-16 bg-surface-subtle dark:bg-slate-800 rounded-full items-center justify-center mb-4">
-                            <Text className="text-3xl">🍽️</Text>
+                            <Text className="text-3xl">{search ? '🔍' : '🍽️'}</Text>
                         </View>
-                        <Text className="text-text-primary dark:text-slate-100 text-lg font-semibold">No products yet</Text>
-                        <Text className="text-text-muted dark:text-slate-500 text-sm mt-1 mb-6">Start building your menu.</Text>
+                        <Text className="text-text-primary dark:text-slate-100 text-lg font-semibold">
+                            {search ? 'No products found' : 'No products yet'}
+                        </Text>
+                        <Text className="text-text-muted dark:text-slate-500 text-sm mt-1 mb-6">
+                            {search ? `No results for "${search}"` : 'Start building your menu.'}
+                        </Text>
                     </View>
                 }
                 renderItem={({ item }) => (

@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useOrder, useVoidOrder } from '@/hooks/use-orders';
 import { useRole } from '@/hooks/use-role';
 import { useSubscription } from '@/hooks/use-subscription';
-import { EscPosBuilder } from '@/lib/printer/esc-pos';
+import { buildReceipt } from '@/lib/printer/receipt-builder';
 import { useAuthStore } from '@/store';
 import { usePrinterStore } from '@/store/printer';
 import { format } from 'date-fns';
@@ -43,50 +43,26 @@ export default function OrderDetailsScreen() {
         if (!order) return;
 
         try {
-            const builder = new EscPosBuilder()
-                .initialize()
-                .align('center')
-                .bold(true)
-                .textLine(tenant?.name || 'BillSnapr')
-                .bold(false);
-
-            // Pro users get custom header
-            if (isPro && tenant?.receipt_header) {
-                builder.textLine(tenant.receipt_header);
-            }
-
-            builder
-                .textLine('--------------------------------')
-                .align('left')
-                .textLine(`Order #: ${order.order_number}`)
-                .textLine(`Date: ${format(new Date(order.created_at), 'dd/MM/yyyy HH:mm')}`);
-
-            if (order.customer_name) {
-                builder.textLine(`Customer: ${order.customer_name}`);
-            }
-
-            builder.textLine('--------------------------------');
-
-            // Items
-            order.order_items?.forEach((item) => {
-                const displayName = item.variant_name ? `${item.product_name} (${item.variant_name})` : item.product_name;
-                builder.textLine(`${item.quantity}x ${displayName}`);
-                builder.align('right').textLine(`${(item.price * item.quantity).toFixed(2)}`).align('left');
+            const config = {
+                tenantName: tenant?.name || 'BillSnapr',
+                currency: tenant?.currency || 'INR',
+                isPro,
+                receiptHeader: tenant?.receipt_header,
+                receiptFooter: tenant?.receipt_footer,
+            };
+            const buffer = buildReceipt(config, {
+                orderNumber: order.order_number,
+                date: order.created_at,
+                customerName: order.customer_name,
+                items: (order.order_items || []).map((item: any) => ({
+                    name: item.product_name || item.name,
+                    variantName: item.variant_name || item.variantName,
+                    price: item.price,
+                    quantity: item.quantity,
+                })),
+                total: order.total,
             });
-
-            builder
-                .textLine('--------------------------------')
-                .align('right')
-                .bold(true)
-                .textLine(`TOTAL: ${order.total.toFixed(2)}`)
-                .bold(false)
-                .align('center')
-                .textLine('--------------------------------')
-                .textLine(isPro && tenant?.receipt_footer ? tenant.receipt_footer : 'Thank You!')
-                .feed(3)
-                .cut();
-
-            await print(builder.getBuffer());
+            await print(buffer);
         } catch (error) {
             Alert.alert('Print Failed', (error as any).message);
         }
